@@ -1,5 +1,5 @@
 {
-  "name": "whatsapp-inbox",
+  "name": "@ivanamato/whatsapp-inbox",
   "version": "0.1.0",
   "type": "module",
   "main": "./dist/whatsapp-inbox.umd.js",
@@ -16,6 +16,9 @@
   "files": [
     "dist"
   ],
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
