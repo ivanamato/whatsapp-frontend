@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { useProvider } from '@/lib/provider-context';
+import { useTranslations } from '@/lib/i18n';
 
 type Message = {
   id: string;
@@ -54,6 +55,7 @@ export function ForwardMessageDialog({
   onForwarded,
 }: Props) {
   const provider = useProvider();
+  const t = useTranslations();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loadingConversations, setLoadingConversations] = useState(false);
   const [search, setSearch] = useState('');
@@ -156,8 +158,8 @@ export function ForwardMessageDialog({
     >
       <DialogContent className="sm:wa:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>Forward message</DialogTitle>
-          <DialogDescription>Choose a contact to forward this message to</DialogDescription>
+          <DialogTitle>{t('forwardDialog.title')}</DialogTitle>
+          <DialogDescription>{t('forwardDialog.description')}</DialogDescription>
         </DialogHeader>
 
         {error && (
@@ -168,7 +170,7 @@ export function ForwardMessageDialog({
 
         {/* Message preview */}
         <div className="wa:p-3 wa:bg-[#f0f2f5] wa:rounded-lg wa:border wa:border-[#d1d7db]">
-          <p className="wa:text-xs wa:text-[#667781] wa:mb-1">Forwarding:</p>
+          <p className="wa:text-xs wa:text-[#667781] wa:mb-1">{t('forwardDialog.forwarding')}</p>
           <p className="wa:text-sm wa:text-[#111b21] wa:line-clamp-3">{previewText}</p>
         </div>
 
@@ -178,7 +180,7 @@ export function ForwardMessageDialog({
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search contacts..."
+            placeholder={t('forwardDialog.searchContacts')}
             className="wa:pl-9 wa:bg-white wa:border-[#d1d7db] focus-visible:wa:ring-[#00a884]"
           />
         </div>
@@ -190,7 +192,7 @@ export function ForwardMessageDialog({
               <Loader2 className="wa:h-6 wa:w-6 wa:animate-spin wa:text-[#667781]" />
             </div>
           ) : filteredConversations.length === 0 ? (
-            <p className="wa:text-center wa:text-sm wa:text-[#667781] wa:py-8">No contacts found</p>
+            <p className="wa:text-center wa:text-sm wa:text-[#667781] wa:py-8">{t('forwardDialog.noContactsFound')}</p>
           ) : (
             <div className="wa:space-y-0.5 wa:px-2">
               {filteredConversations.map((conv) => (
@@ -226,7 +228,7 @@ export function ForwardMessageDialog({
         {/* Send button */}
         <div className="wa:flex wa:justify-end wa:gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t('forwardDialog.cancel')}
           </Button>
           <Button
             onClick={handleForward}
@@ -238,7 +240,7 @@ export function ForwardMessageDialog({
             ) : (
               <>
                 <Send className="wa:h-4 wa:w-4 wa:mr-1" />
-                Forward
+                {t('forwardDialog.forward')}
               </>
             )}
           </Button>

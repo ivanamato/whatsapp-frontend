@@ -1,4 +1,5 @@
 export type ProviderType = 'evolution' | 'cloud';
+export type ViewMode = 'single' | 'all';
 export type DeviceConfig = {
     id: string;
     label?: string;
@@ -11,6 +12,7 @@ export type DeviceConfig = {
 export type WhatsAppMultiDeviceConfig = {
     devices: DeviceConfig[];
     defaultDeviceId?: string;
+    translations?: Partial<import('../i18n').Translations>;
 };
 export type Chat = {
     id: string;

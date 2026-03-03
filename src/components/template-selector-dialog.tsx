@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import type { Template, TemplateParameterInfo } from '@/types/whatsapp';
 import { getTemplateParameters } from '@/lib/template-parser';
+import { useTranslations } from '@/lib/i18n';
 import { TemplateParametersDialog } from './template-parameters-dialog';
 
 type Props = {
@@ -23,6 +24,7 @@ type Props = {
 };
 
 export function TemplateSelectorDialog({ open, onOpenChange, phoneNumber, onTemplateSent }: Props) {
+  const t = useTranslations();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState<string | null>(null);
@@ -45,11 +47,11 @@ export function TemplateSelectorDialog({ open, onOpenChange, phoneNumber, onTemp
     try {
       // Templates are not yet implemented for Evolution API
       // This would need a provider method when templates are supported
-      setError('Templates are not yet supported for this provider');
+      setError(t('templateSelector.notSupported'));
       setTemplates([]);
     } catch (err) {
       console.error('Error fetching templates:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load templates');
+      setError(err instanceof Error ? err.message : t('templateSelector.notSupported'));
     } finally {
       setLoading(false);
     }
@@ -75,10 +77,10 @@ export function TemplateSelectorDialog({ open, onOpenChange, phoneNumber, onTemp
     setError(null);
     try {
       // Templates not yet implemented for direct provider calls
-      setError('Templates are not yet supported for this provider');
+      setError(t('templateSelector.notSupported'));
     } catch (err) {
       console.error('Error sending template:', err);
-      setError(err instanceof Error ? err.message : 'Failed to send template');
+      setError(err instanceof Error ? err.message : t('templateSelector.notSupported'));
     } finally {
       setSending(null);
     }
@@ -116,9 +118,9 @@ export function TemplateSelectorDialog({ open, onOpenChange, phoneNumber, onTemp
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:wa:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>Send template message</DialogTitle>
+          <DialogTitle>{t('templateSelector.title')}</DialogTitle>
           <DialogDescription>
-            Select a template to send to {phoneNumber}
+            {t('templateSelector.description', { phoneNumber })}
           </DialogDescription>
         </DialogHeader>
 
@@ -134,7 +136,7 @@ export function TemplateSelectorDialog({ open, onOpenChange, phoneNumber, onTemp
           </div>
         ) : templates.length === 0 ? (
           <div className="wa:py-8 wa:text-center wa:text-muted-foreground">
-            No approved templates found
+            {t('templateSelector.noTemplates')}
           </div>
         ) : (
           <ScrollArea className="wa:h-[400px] wa:pr-4">
@@ -169,7 +171,7 @@ export function TemplateSelectorDialog({ open, onOpenChange, phoneNumber, onTemp
                       ) : (
                         <>
                           <Send className="wa:h-4 wa:w-4 wa:mr-1" />
-                          Send
+                          {t('templateSelector.send')}
                         </>
                       )}
                     </Button>
@@ -184,7 +186,7 @@ export function TemplateSelectorDialog({ open, onOpenChange, phoneNumber, onTemp
 
         <div className="wa:flex wa:justify-end wa:gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t('templateSelector.cancel')}
           </Button>
         </div>
       </DialogContent>

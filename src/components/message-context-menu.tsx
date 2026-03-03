@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { useProvider } from '@/lib/provider-context';
+import { useTranslations } from '@/lib/i18n';
 
 type Message = {
   id: string;
@@ -55,6 +56,7 @@ export function MessageContextMenu({
   readOnly = false,
 }: Props) {
   const provider = useProvider();
+  const t = useTranslations();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -92,7 +94,7 @@ export function MessageContextMenu({
         <DropdownMenuTrigger asChild>
           <button
             className="wa:absolute wa:top-1 wa:right-1 wa:z-10 wa:opacity-0 group-hover:wa:opacity-100 wa:transition-opacity wa:rounded-full wa:p-0.5 hover:wa:bg-black/5"
-            aria-label="Message options"
+            aria-label={t('contextMenu.messageOptions')}
           >
             <ChevronDown className="wa:h-4 wa:w-4 wa:text-[#667781]" />
           </button>
@@ -100,13 +102,13 @@ export function MessageContextMenu({
         <DropdownMenuContent align="end" className="wa:w-40">
           <DropdownMenuItem onClick={handleCopy}>
             <Copy className="wa:h-4 wa:w-4 wa:mr-2" />
-            Copy
+            {t('contextMenu.copy')}
           </DropdownMenuItem>
           {!readOnly && (
             <>
               <DropdownMenuItem onClick={() => onForward(message)}>
                 <Forward className="wa:h-4 wa:w-4 wa:mr-2" />
-                Forward
+                {t('contextMenu.forward')}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
@@ -114,7 +116,7 @@ export function MessageContextMenu({
                 className="wa:text-red-600 focus:wa:text-red-600"
               >
                 <Trash2 className="wa:h-4 wa:w-4 wa:mr-2" />
-                Delete
+                {t('contextMenu.delete')}
               </DropdownMenuItem>
             </>
           )}
@@ -124,9 +126,9 @@ export function MessageContextMenu({
       <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
         <DialogContent className="sm:wa:max-w-[400px]">
           <DialogHeader>
-            <DialogTitle>Delete message</DialogTitle>
+            <DialogTitle>{t('contextMenu.deleteMessage')}</DialogTitle>
             <DialogDescription>
-              This will delete the message for everyone in the chat. This action cannot be undone.
+              {t('contextMenu.deleteConfirmation')}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -135,7 +137,7 @@ export function MessageContextMenu({
               onClick={() => setShowDeleteConfirm(false)}
               disabled={deleting}
             >
-              Cancel
+              {t('contextMenu.cancel')}
             </Button>
             <Button
               variant="destructive"
@@ -145,7 +147,7 @@ export function MessageContextMenu({
               {deleting ? (
                 <Loader2 className="wa:h-4 wa:w-4 wa:animate-spin" />
               ) : (
-                'Delete for everyone'
+                t('contextMenu.deleteForEveryone')
               )}
             </Button>
           </DialogFooter>

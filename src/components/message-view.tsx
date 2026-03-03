@@ -14,6 +14,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useProvider } from '@/lib/provider-context';
+import { useTranslations } from '@/lib/i18n';
 import type { WhatsAppProvider } from '@/lib/providers/types';
 
 type Message = {
@@ -53,13 +54,13 @@ function formatMessageTime(timestamp: string): string {
   }
 }
 
-function formatDateDivider(timestamp: string): string {
+function formatDateDivider(timestamp: string, todayLabel: string, yesterdayLabel: string): string {
   try {
     const date = new Date(timestamp);
     if (!isValid(date)) return '';
 
-    if (isToday(date)) return 'Today';
-    if (isYesterday(date)) return 'Yesterday';
+    if (isToday(date)) return todayLabel;
+    if (isYesterday(date)) return yesterdayLabel;
     return format(date, 'MMMM d, yyyy');
   } catch {
     return '';
@@ -101,14 +102,14 @@ function isWithin24HourWindow(messages: Message[]): boolean {
   }
 }
 
-function getDisabledInputMessage(messages: Message[]): string {
+function getDisabledInputMessage(messages: Message[], noInbound: string, outside24h: string): string {
   const inboundMessages = messages.filter(msg => msg.direction === 'inbound');
 
   if (inboundMessages.length === 0) {
-    return "User hasn't messaged yet. Send a template message or wait for them to reply.";
+    return noInbound;
   }
 
-  return "Last message was over 24 hours ago. Send a template message or wait for the user to message you.";
+  return outside24h;
 }
 
 function readFileAsBase64(file: File): Promise<string> {
@@ -173,6 +174,7 @@ type Props = {
 export function MessageView({ conversationId, phoneNumber, contactName, profilePicUrl, onTemplateSent, onBack, isVisible = false, instance, provider: providerType, readOnly = false, providerOverride }: Props) {
   const contextProvider = useProvider();
   const provider = providerOverride || contextProvider;
+  const t = useTranslations();
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -368,9 +370,9 @@ export function MessageView({ conversationId, phoneNumber, contactName, profileP
               <path fill="currentColor" d="M229.565 160.229c32.647-16.166 55.1-50.26 55.1-89.52 0-55.107-45.235-99.791-100.418-99.791-38.633 0-72.103 21.423-88.856 52.891-2.309-.098-4.632-.148-6.968-.148C39.643 23.661 0 63.304 0 112.084c0 24.283 9.834 46.269 25.74 62.21a5.907 5.907 0 0 1-.083-.333c-2.319-10.974-7.19-28.22-18.148-43.478l.063-.043c10.753 6.68 43.07 22.992 80.857 18.498 25.566 19.477 57.102 29.99 90.351 29.99 15.694 0 30.794-2.711 44.846-7.661-1.006-.089-2.013-.192-3.019-.31a209.273 209.273 0 0 1-19.306-3.32c6.839 2.726 15.161-4.476 28.264-7.408z" opacity=".4"/>
             </svg>
           </div>
-          <h2 className="wa:text-[32px] wa:font-light wa:text-[#41525d] wa:mb-2.5 wa:leading-tight">WhatsApp Inbox</h2>
+          <h2 className="wa:text-[32px] wa:font-light wa:text-[#41525d] wa:mb-2.5 wa:leading-tight">{t('messageView.title')}</h2>
           <p className="wa:text-[14px] wa:text-[#667781] wa:leading-[20px]">
-            Send and receive messages. Select a conversation from the sidebar to get started.
+            {t('messageView.emptyStateDescription')}
           </p>
         </div>
       </div>
@@ -466,7 +468,7 @@ export function MessageView({ conversationId, phoneNumber, contactName, profileP
           {messages.length === 0 ? (
             <div className="wa:flex wa:justify-center wa:mt-8">
               <span className="wa:bg-[#fdf4c5] wa:text-[#54656f] wa:text-[12.5px] wa:px-3 wa:py-1.5 wa:rounded-[7.5px] wa:shadow-[0_1px_0.5px_rgba(11,20,26,0.13)] wa:text-center wa:max-w-[330px]">
-                Messages are end-to-end encrypted. No one outside of this chat, not even WhatsApp, can read or listen to them.
+                {t('messageView.encryptionNotice')}
               </span>
             </div>
           ) : (
@@ -481,7 +483,7 @@ export function MessageView({ conversationId, phoneNumber, contactName, profileP
                   {showDateDivider && (
                     <div style={{ margin: '20px 0' }} className="wa:flex wa:justify-center">
                       <span style={{ padding: '7px 14px' }} className="wa:bg-white wa:text-[#54656f] wa:text-[12.5px] wa:rounded-[7.5px] wa:shadow-[0_1px_0.5px_rgba(11,20,26,0.13)] wa:select-none wa:font-normal">
-                        {formatDateDivider(message.createdAt)}
+                        {formatDateDivider(message.createdAt, t('messageView.today'), t('messageView.yesterday'))}
                       </span>
                     </div>
                   )}
@@ -527,7 +529,7 @@ export function MessageView({ conversationId, phoneNumber, contactName, profileP
                       >
                       {message.messageType === 'deleted' ? (
                         <p className="wa:text-[14.2px] wa:leading-[19px] wa:italic wa:text-[#8696a0]">
-                          This message was deleted
+                          {t('messageView.messageDeleted')}
                         </p>
                       ) : (
                         <>
@@ -566,7 +568,7 @@ export function MessageView({ conversationId, phoneNumber, contactName, profileP
                                     className="wa:flex wa:items-center wa:gap-2 wa:text-[14.2px] wa:underline wa:cursor-pointer hover:wa:opacity-80 wa:text-[#027eb5]"
                                   >
                                     <Paperclip className="wa:h-4 wa:w-4 wa:flex-shrink-0" />
-                                    {message.mediaData.filename || message.filename || 'Download file'}
+                                    {message.mediaData.filename || message.filename || t('messageView.downloadFile')}
                                   </a>
                                 </div>
                               )}
@@ -626,7 +628,7 @@ export function MessageView({ conversationId, phoneNumber, contactName, profileP
                       {isOutbound && message.status === 'failed' && (
                         <div className="wa:mt-0.5 wa:clear-both">
                           <span className="wa:text-[11px] wa:text-red-500 wa:flex wa:items-center wa:gap-1">
-                            Not delivered
+                            {t('messageView.notDelivered')}
                           </span>
                         </div>
                       )}
@@ -652,7 +654,7 @@ export function MessageView({ conversationId, phoneNumber, contactName, profileP
       {/* ── Input area ── */}
       {readOnly ? (
         <div className="wa:bg-[#f0f2f5] wa:border-l wa:border-[#e9edef] wa:flex-shrink-0 wa:px-4 wa:py-3 wa:text-center wa:text-[13px] wa:text-[#667781]">
-          This device is in read-only mode
+          {t('messageView.readOnlyMode')}
         </div>
       ) : (
       <div className="wa:bg-[#f0f2f5] wa:border-l wa:border-[#e9edef] wa:flex-shrink-0">
@@ -700,7 +702,7 @@ export function MessageView({ conversationId, phoneNumber, contactName, profileP
                 variant="ghost"
                 size="icon"
                 className="wa:text-[#54656f] hover:wa:bg-transparent hover:wa:text-[#111b21] wa:h-[42px] wa:w-[42px] wa:flex-shrink-0"
-                title="Upload file"
+                title={t('messageView.uploadFile')}
               >
                 <Paperclip className="wa:h-[22px] wa:w-[22px] wa:rotate-45" />
               </Button>
@@ -711,7 +713,7 @@ export function MessageView({ conversationId, phoneNumber, contactName, profileP
                 size="icon"
                 variant="ghost"
                 className="wa:text-[#54656f] hover:wa:bg-transparent hover:wa:text-[#111b21] wa:h-[42px] wa:w-[42px] wa:flex-shrink-0"
-                title="Send interactive message"
+                title={t('messageView.sendInteractiveMessage')}
               >
                 <ListTree className="wa:h-[22px] wa:w-[22px]" />
               </Button>
@@ -725,7 +727,7 @@ export function MessageView({ conversationId, phoneNumber, contactName, profileP
                       handleSendMessage(e);
                     }
                   }}
-                  placeholder="Type a message"
+                  placeholder={t('messageView.typeMessage')}
                   disabled={sending}
                   style={{ padding: '8px 12px' }}
                   className="wa:w-full wa:h-[42px] wa:bg-white wa:border-none wa:outline-none wa:rounded-[8px] wa:text-[15px] wa:text-[#111b21] wa:placeholder-[#667781] focus:wa:ring-0"
@@ -754,7 +756,7 @@ export function MessageView({ conversationId, phoneNumber, contactName, profileP
                 <AlertCircle className="wa:h-5 wa:w-5 wa:text-[#8b7000] wa:flex-shrink-0 wa:mt-0.5" />
                 <div className="wa:flex-1 wa:min-w-0">
                   <p className="wa:text-[14px] wa:text-[#111b21] wa:mb-3">
-                    {getDisabledInputMessage(messages)}
+                    {getDisabledInputMessage(messages, t('messageView.noInboundMessages'), t('messageView.outside24HourWindow'))}
                   </p>
                   <Button
                     onClick={() => setShowTemplateDialog(true)}
@@ -762,7 +764,7 @@ export function MessageView({ conversationId, phoneNumber, contactName, profileP
                     size="sm"
                   >
                     <MessageSquare className="wa:h-4 wa:w-4 wa:mr-2" />
-                    Send template
+                    {t('messageView.sendTemplate')}
                   </Button>
                 </div>
               </div>

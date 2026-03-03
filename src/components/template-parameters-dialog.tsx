@@ -14,6 +14,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import type { Template, TemplateParameterInfo } from '@/types/whatsapp';
+import { useTranslations } from '@/lib/i18n';
 import { formatParametersForTemplate } from '@/lib/template-parser';
 
 type Props = {
@@ -35,6 +36,7 @@ export function TemplateParametersDialog({
   onBack,
   onTemplateSent,
 }: Props) {
+  const t = useTranslations();
   const [parameterValues, setParameterValues] = useState<Record<string, string>>({});
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -52,7 +54,7 @@ export function TemplateParametersDialog({
 
   const handleSend = async () => {
     if (!allParametersFilled) {
-      setError('Please fill in all parameters');
+      setError(t('templateParameters.fillAllParameters'));
       return;
     }
 
@@ -64,10 +66,10 @@ export function TemplateParametersDialog({
       void formatParametersForTemplate(parameterInfo, parameterValues);
       void phoneNumber;
       void template;
-      setError('Templates are not yet supported for this provider');
+      setError(t('templateParameters.notSupported'));
     } catch (err) {
       console.error('Error sending template:', err);
-      setError(err instanceof Error ? err.message : 'Failed to send template');
+      setError(err instanceof Error ? err.message : t('templateParameters.notSupported'));
     } finally {
       setSending(false);
     }
@@ -96,9 +98,9 @@ export function TemplateParametersDialog({
               <ArrowLeft className="wa:h-4 wa:w-4" />
             </Button>
             <div>
-              <DialogTitle>Template parameters</DialogTitle>
+              <DialogTitle>{t('templateParameters.title')}</DialogTitle>
               <DialogDescription>
-                Fill in the parameters for {template.name}
+                {t('templateParameters.description', { templateName: template.name })}
               </DialogDescription>
             </div>
           </div>
@@ -134,7 +136,7 @@ export function TemplateParametersDialog({
                 />
                 {param.example && (
                   <p className="wa:text-xs wa:text-[#667781]">
-                    Example: {param.example}
+                    {t('templateParameters.example', { example: param.example || '' })}
                   </p>
                 )}
               </div>
@@ -146,7 +148,7 @@ export function TemplateParametersDialog({
 
         <div className="wa:flex wa:justify-between wa:gap-2">
           <Button variant="outline" onClick={onBack}>
-            Back
+            {t('templateParameters.back')}
           </Button>
           <Button
             onClick={handleSend}
@@ -158,7 +160,7 @@ export function TemplateParametersDialog({
             ) : (
               <>
                 <Send className="wa:h-4 wa:w-4 wa:mr-1" />
-                Send template
+                {t('templateParameters.sendTemplate')}
               </>
             )}
           </Button>

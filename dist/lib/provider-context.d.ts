@@ -1,11 +1,13 @@
 import { PropsWithChildren } from '../../preact/compat';
-import { WhatsAppProvider, DeviceConfig, WhatsAppMultiDeviceConfig } from './providers/types';
+import { WhatsAppProvider, DeviceConfig, WhatsAppMultiDeviceConfig, ViewMode } from './providers/types';
 export type DeviceContextValue = {
     devices: DeviceConfig[];
     selectedDevice: DeviceConfig | null;
     selectDevice: (deviceId: string) => void;
     getProviderForDevice: (device: DeviceConfig) => WhatsAppProvider;
     readonly: boolean;
+    viewMode: ViewMode;
+    setViewMode: (mode: ViewMode) => void;
 };
 export declare function ProviderProvider({ config, children }: PropsWithChildren<{
     config: WhatsAppMultiDeviceConfig;

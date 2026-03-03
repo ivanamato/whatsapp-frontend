@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AudioPlayer } from '@/components/audio-player';
 import { useProvider } from '@/lib/provider-context';
+import { useTranslations } from '@/lib/i18n';
 
 type Props = {
   mediaId: string;
@@ -16,6 +17,7 @@ type Props = {
 
 export function MediaMessage({ mediaId, messageType, caption, filename, isOutbound, instance }: Props) {
   const provider = useProvider();
+  const t = useTranslations();
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -68,7 +70,7 @@ export function MediaMessage({ mediaId, messageType, caption, filename, isOutbou
         isAudioType ? 'wa:min-w-[240px] wa:h-12 wa:px-4' : 'wa:w-64 wa:h-48'
       )}>
         <p className={cn('wa:text-sm', isOutbound ? 'wa:text-green-100' : 'wa:text-muted-foreground')}>
-          Media unavailable
+          {t('mediaMessage.unavailable')}
         </p>
       </div>
     );
@@ -106,7 +108,7 @@ export function MediaMessage({ mediaId, messageType, caption, filename, isOutbou
           className="wa:flex wa:items-center wa:gap-2 wa:text-sm wa:underline wa:cursor-pointer hover:wa:opacity-80 wa:transition-opacity wa:text-[#00a884]"
         >
           <FileText className="wa:h-4 wa:w-4" />
-          {filename || 'Download document'}
+          {filename || t('mediaMessage.downloadDocument')}
         </a>
       )}
     </div>

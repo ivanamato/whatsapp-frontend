@@ -1,3 +1,4 @@
+import { WhatsAppProvider } from '../lib/providers/types';
 type Props = {
     conversationId?: string;
     phoneNumber?: string;
@@ -9,6 +10,7 @@ type Props = {
     instance?: string;
     provider?: string;
     readOnly?: boolean;
+    providerOverride?: WhatsAppProvider;
 };
-export declare function MessageView({ conversationId, phoneNumber, contactName, profilePicUrl, onTemplateSent, onBack, isVisible, instance, provider: providerType, readOnly }: Props): import("preact").JSX.Element;
+export declare function MessageView({ conversationId, phoneNumber, contactName, profilePicUrl, onTemplateSent, onBack, isVisible, instance, provider: providerType, readOnly, providerOverride }: Props): import("preact").JSX.Element;
 export {};

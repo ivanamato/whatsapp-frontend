@@ -1,6 +1,7 @@
 import { createContext, useContext, useMemo, useState, useCallback, type PropsWithChildren } from 'react';
 import { EvolutionProvider } from './providers/evolution';
 import type { WhatsAppProvider, ProviderType, DeviceConfig, WhatsAppMultiDeviceConfig, ViewMode } from './providers/types';
+import { TranslationsProvider } from './i18n';
 
 // --- Provider registry: one provider per unique (apiUrl, apiKey, providerType) ---
 
@@ -87,11 +88,13 @@ export function ProviderProvider({ config, children }: PropsWithChildren<{ confi
   }), [devices, selectedDevice, selectDevice, getProviderForDeviceFn, isReadonly, viewMode]);
 
   return (
-    <DeviceContext.Provider value={deviceContextValue}>
-      <ProviderContext.Provider value={activeProvider}>
-        {children}
-      </ProviderContext.Provider>
-    </DeviceContext.Provider>
+    <TranslationsProvider translations={config.translations}>
+      <DeviceContext.Provider value={deviceContextValue}>
+        <ProviderContext.Provider value={activeProvider}>
+          {children}
+        </ProviderContext.Provider>
+      </DeviceContext.Provider>
+    </TranslationsProvider>
   );
 }
 

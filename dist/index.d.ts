@@ -1,5 +1,7 @@
 import { WhatsAppMultiDeviceConfig } from './lib/providers/types';
 export type { WhatsAppProvider, ProviderType, Chat, Message, SendTextParams, SendMediaParams, SendButtonsParams, SendResult, DeviceConfig, WhatsAppMultiDeviceConfig } from './lib/providers/types';
+export type { Translations } from './lib/i18n';
+export { defaultTranslations, useTranslations, TranslationsProvider } from './lib/i18n';
 export { EvolutionProvider } from './lib/providers/evolution';
 export { ProviderProvider, useProvider, useDeviceContext } from './lib/provider-context';
 export { createProvider } from './lib/providers/index';

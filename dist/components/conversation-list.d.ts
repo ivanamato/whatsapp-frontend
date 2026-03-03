@@ -11,6 +11,8 @@ type Conversation = {
         type?: string;
     };
     unreadCount?: number;
+    deviceId?: string;
+    deviceLabel?: string;
 };
 type Props = {
     onSelectConversation: (conversation: Conversation) => void;

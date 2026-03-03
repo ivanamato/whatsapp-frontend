@@ -8,6 +8,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useProvider, useDeviceContext } from '@/lib/provider-context';
+import { useTranslations } from '@/lib/i18n';
 
 type Conversation = {
   id: string;
@@ -26,13 +27,13 @@ type Conversation = {
   deviceLabel?: string;
 };
 
-function formatConversationDate(timestamp: string): string {
+function formatConversationDate(timestamp: string, yesterdayLabel: string): string {
   try {
     const date = new Date(timestamp);
     if (!isValid(date)) return '';
 
     if (isToday(date)) return format(date, 'HH:mm');
-    if (isYesterday(date)) return 'Yesterday';
+    if (isYesterday(date)) return yesterdayLabel;
     return format(date, 'MMM d');
   } catch {
     return '';
@@ -73,6 +74,7 @@ export const ConversationList = forwardRef<ConversationListRef, Props>(
   ({ onSelectConversation, selectedConversationId, isHidden = false, instance }, ref) => {
   const provider = useProvider();
   const { viewMode, devices, getProviderForDevice } = useDeviceContext();
+  const t = useTranslations();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -231,7 +233,7 @@ export const ConversationList = forwardRef<ConversationListRef, Props>(
         "wa-sidebar wa:w-full wa:border-r wa:border-[#e9edef] wa:bg-white wa:flex wa:flex-col wa:items-center wa:justify-center",
         isHidden && "wa-sidebar--hidden"
       )}>
-        <p className="wa:text-[#667781] wa:text-[14px]">Select an instance to view chats</p>
+        <p className="wa:text-[#667781] wa:text-[14px]">{t('conversationList.selectInstance')}</p>
       </div>
     );
   }
@@ -245,11 +247,11 @@ export const ConversationList = forwardRef<ConversationListRef, Props>(
       <div className="wa:flex-shrink-0">
         <div style={{ padding: '12px 16px 4px' }} className="wa:flex wa:items-center wa:justify-between">
           <div className="wa:flex wa:items-center wa:gap-2">
-            <h1 className="wa:text-[22px] wa:font-bold wa:text-[#111b21] wa:leading-none">Chats</h1>
+            <h1 className="wa:text-[22px] wa:font-bold wa:text-[#111b21] wa:leading-none">{t('conversationList.chats')}</h1>
             {isPolling && (
               <div
                 className="wa:h-2 wa:w-2 wa:rounded-full wa:bg-green-500 wa:animate-pulse"
-                title="Auto-updating"
+                title={t('conversationList.autoUpdating')}
               />
             )}
           </div>
@@ -282,7 +284,7 @@ export const ConversationList = forwardRef<ConversationListRef, Props>(
               onChange={(e) => setSearchQuery(e.target.value)}
               onFocus={() => setSearchFocused(true)}
               onBlur={() => setSearchFocused(false)}
-              placeholder="Search or start new chat"
+              placeholder={t('conversationList.searchPlaceholder')}
               className="wa:flex-1 wa:bg-transparent wa:border-none wa:outline-none wa:text-[13px] wa:text-[#111b21] wa:placeholder-[#667781] wa:h-full"
             />
           </div>
@@ -293,7 +295,7 @@ export const ConversationList = forwardRef<ConversationListRef, Props>(
       <ScrollArea className="wa:flex-1 wa:h-0 wa:overflow-hidden">
         {filteredConversations.length === 0 ? (
           <div className="wa:py-8 wa:text-center wa:text-[#667781] wa:text-[14px]">
-            {searchQuery ? 'No conversations found' : 'No conversations yet'}
+            {searchQuery ? t('conversationList.noConversationsFound') : t('conversationList.noConversationsYet')}
           </div>
         ) : (
           <div className="wa:w-full wa:overflow-hidden">
@@ -341,7 +343,7 @@ export const ConversationList = forwardRef<ConversationListRef, Props>(
                         ? "wa:text-[#00a884]"
                         : "wa:text-[#667781]"
                     )}>
-                      {formatConversationDate(conversation.lastActiveAt)}
+                      {formatConversationDate(conversation.lastActiveAt, t('conversationList.yesterday'))}
                     </span>
                   </div>
                   {/* Device badge in all-devices mode */}

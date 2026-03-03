@@ -13,6 +13,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import { useProvider } from '@/lib/provider-context';
+import { useTranslations } from '@/lib/i18n';
 
 type ButtonItem = {
   id: string;
@@ -37,6 +38,7 @@ export function InteractiveMessageDialog({
   instance,
 }: Props) {
   const provider = useProvider();
+  const t = useTranslations();
   const [header, setHeader] = useState('');
   const [body, setBody] = useState('');
   const [buttons, setButtons] = useState<ButtonItem[]>([
@@ -84,17 +86,17 @@ export function InteractiveMessageDialog({
 
   const handleSend = async () => {
     if (!isValid()) {
-      setError('Please fill in the body and all button titles');
+      setError(t('interactiveDialog.validationError'));
       return;
     }
 
     if (!conversationId || !phoneNumber) {
-      setError('No conversation selected');
+      setError(t('interactiveDialog.noConversation'));
       return;
     }
 
     if (!instance) {
-      setError('No instance selected');
+      setError(t('interactiveDialog.noInstance'));
       return;
     }
 
@@ -117,7 +119,7 @@ export function InteractiveMessageDialog({
       onMessageSent?.();
     } catch (err) {
       console.error('Error sending interactive message:', err);
-      setError(err instanceof Error ? err.message : 'Failed to send message');
+      setError(err instanceof Error ? err.message : t('interactiveDialog.validationError'));
     } finally {
       setSending(false);
     }
@@ -130,9 +132,9 @@ export function InteractiveMessageDialog({
     }}>
       <DialogContent className="sm:wa:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>Send interactive message</DialogTitle>
+          <DialogTitle>{t('interactiveDialog.title')}</DialogTitle>
           <DialogDescription>
-            Create a message with interactive buttons
+            {t('interactiveDialog.description')}
           </DialogDescription>
         </DialogHeader>
 
@@ -145,26 +147,26 @@ export function InteractiveMessageDialog({
         <div className="wa:space-y-4">
           <div className="wa:space-y-2">
             <Label htmlFor="header" className="wa:text-[#111b21]">
-              Header (optional)
+              {t('interactiveDialog.headerLabel')}
             </Label>
             <Input
               id="header"
               value={header}
               onChange={(e) => setHeader(e.target.value)}
-              placeholder="Add a header to your message"
+              placeholder={t('interactiveDialog.headerPlaceholder')}
               className="wa:bg-white wa:border-[#d1d7db] focus-visible:wa:ring-[#00a884]"
             />
           </div>
 
           <div className="wa:space-y-2">
             <Label htmlFor="body" className="wa:text-[#111b21]">
-              Body <span className="wa:text-red-500">*</span>
+              {t('interactiveDialog.bodyLabel')} <span className="wa:text-red-500">*</span>
             </Label>
             <Textarea
               id="body"
               value={body}
               onChange={(e) => setBody(e.target.value)}
-              placeholder="Enter your message text"
+              placeholder={t('interactiveDialog.bodyPlaceholder')}
               className="wa:bg-white wa:border-[#d1d7db] focus-visible:wa:ring-[#00a884] wa:min-h-[100px]"
             />
           </div>
@@ -172,7 +174,7 @@ export function InteractiveMessageDialog({
           <div className="wa:space-y-2">
             <div className="wa:flex wa:items-center wa:justify-between">
               <Label className="wa:text-[#111b21]">
-                Buttons <span className="wa:text-red-500">*</span>
+                {t('interactiveDialog.buttonsLabel')} <span className="wa:text-red-500">*</span>
               </Label>
               <Button
                 type="button"
@@ -183,7 +185,7 @@ export function InteractiveMessageDialog({
                 className="wa:h-8 wa:text-[#00a884] hover:wa:text-[#008f6f] hover:wa:bg-[#f0f2f5]"
               >
                 <Plus className="wa:h-4 wa:w-4 wa:mr-1" />
-                Add button
+                {t('interactiveDialog.addButton')}
               </Button>
             </div>
 
@@ -193,7 +195,7 @@ export function InteractiveMessageDialog({
                   <Input
                     value={button.title}
                     onChange={(e) => handleButtonTitleChange(index, e.target.value)}
-                    placeholder={`Button ${index + 1} title`}
+                    placeholder={t('interactiveDialog.buttonPlaceholder', { index: String(index + 1) })}
                     className="wa:bg-white wa:border-[#d1d7db] focus-visible:wa:ring-[#00a884]"
                     maxLength={20}
                   />
@@ -217,7 +219,7 @@ export function InteractiveMessageDialog({
 
             {buttons.length < 3 && (
               <p className="wa:text-xs wa:text-[#667781]">
-                You can add up to {3 - buttons.length} more button{3 - buttons.length !== 1 ? 's' : ''}
+                {t('interactiveDialog.moreButtons', { count: String(3 - buttons.length) })}
               </p>
             )}
           </div>
@@ -227,7 +229,7 @@ export function InteractiveMessageDialog({
 
         <div className="wa:flex wa:justify-between wa:gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t('interactiveDialog.cancel')}
           </Button>
           <Button
             onClick={handleSend}
@@ -239,7 +241,7 @@ export function InteractiveMessageDialog({
             ) : (
               <>
                 <Send className="wa:h-4 wa:w-4 wa:mr-1" />
-                Send
+                {t('interactiveDialog.send')}
               </>
             )}
           </Button>

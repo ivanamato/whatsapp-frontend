@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils';
 import { useAutoPolling } from '@/hooks/use-auto-polling';
 import { Badge } from '@/components/ui/badge';
 import { useDeviceContext } from '@/lib/provider-context';
+import { useTranslations } from '@/lib/i18n';
 import type { DeviceConfig, ViewMode } from '@/lib/providers/types';
 
 type DeviceStatus = 'open' | 'close' | 'connecting' | 'loading';
@@ -14,6 +15,7 @@ type Props = {
 
 export function InstanceSelector({ onDeviceChange }: Props) {
   const { devices, selectedDevice, selectDevice, getProviderForDevice, viewMode, setViewMode } = useDeviceContext();
+  const t = useTranslations();
   const [statuses, setStatuses] = useState<Record<string, DeviceStatus>>({});
   const [open, setOpen] = useState(false);
   const [initialLoad, setInitialLoad] = useState(true);
@@ -69,7 +71,7 @@ export function InstanceSelector({ onDeviceChange }: Props) {
     return (
       <div className="wa:flex wa:items-center wa:justify-center wa:gap-3 wa:px-4 wa:py-3 wa:text-base wa:text-[#8696a0]">
         <Loader2 className="wa:h-5 wa:w-5 wa:animate-spin" />
-        Loading devices...
+        {t('instanceSelector.loadingDevices')}
       </div>
     );
   }
@@ -78,7 +80,7 @@ export function InstanceSelector({ onDeviceChange }: Props) {
     return (
       <div className="wa:flex wa:items-center wa:justify-center wa:gap-3 wa:px-4 wa:py-3 wa:text-base wa:text-red-400">
         <WifiOff className="wa:h-5 wa:w-5" />
-        No devices configured
+        {t('instanceSelector.noDevicesConfigured')}
       </div>
     );
   }
@@ -102,7 +104,7 @@ export function InstanceSelector({ onDeviceChange }: Props) {
           >
             <StatusDot status={selectedDevice ? (statuses[selectedDevice.id] || 'close') : 'close'} />
             <span className="wa:text-base wa:font-medium wa:text-[#e9edef] wa:truncate">
-              {selectedDevice?.label || selectedDevice?.instanceName || 'Select device'}
+              {selectedDevice?.label || selectedDevice?.instanceName || t('instanceSelector.selectDevice')}
             </span>
             <Badge variant="outline" className="wa:text-xs wa:px-2 wa:py-0.5 wa:h-5 wa:uppercase wa:text-[#8696a0] wa:border-[#8696a0]/40">
               {(selectedDevice?.providerType || 'evolution') === 'evolution' ? 'EVO' : 'CLOUD'}
@@ -113,10 +115,10 @@ export function InstanceSelector({ onDeviceChange }: Props) {
           /* All mode: summary label */
           <div className="wa:flex wa:flex-1 wa:items-center wa:justify-center wa:gap-3 wa:px-4 wa:py-3 wa:min-w-0">
             <span className="wa:text-base wa:font-medium wa:text-[#e9edef] wa:truncate">
-              All Devices
+              {t('instanceSelector.allDevices')}
             </span>
             <Badge variant="outline" className="wa:text-xs wa:text-[#8696a0] wa:border-[#8696a0]/40" style={{ padding: '4px 12px' }}>
-              {connectedCount} connected
+              {connectedCount} {t('instanceSelector.connected')}
             </Badge>
           </div>
         )}
@@ -125,7 +127,7 @@ export function InstanceSelector({ onDeviceChange }: Props) {
       {open && viewMode === 'single' && (
         <SimpleModal onClose={() => setOpen(false)}>
           <div className="wa:mb-2 wa:flex wa:flex-col wa:gap-2 wa:text-center">
-            <h2 className="wa:text-lg wa:leading-none wa:font-semibold wa:text-[#e9edef]">Select Device</h2>
+            <h2 className="wa:text-lg wa:leading-none wa:font-semibold wa:text-[#e9edef]">{t('instanceSelector.selectDevice')}</h2>
           </div>
           <div className="wa:flex wa:flex-col wa:gap-3">
             {devices.map((device) => (
@@ -148,6 +150,7 @@ export function InstanceSelector({ onDeviceChange }: Props) {
 }
 
 function SimpleModal({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+  const t = useTranslations();
   const overlayRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -175,7 +178,7 @@ function SimpleModal({ children, onClose }: { children: React.ReactNode; onClose
           className="wa:absolute wa:top-4 wa:right-4 wa:rounded-xs wa:opacity-70 wa:transition-opacity hover:wa:opacity-100 wa:text-[#8696a0]"
         >
           <XIcon className="wa:h-4 wa:w-4" />
-          <span className="wa:sr-only">Close</span>
+          <span className="wa:sr-only">{t('instanceSelector.close')}</span>
         </button>
         {children}
       </div>
@@ -224,6 +227,7 @@ function DeviceOption({
 }
 
 function ViewModeToggle({ viewMode, onViewModeChange }: { viewMode: ViewMode; onViewModeChange: (mode: ViewMode) => void }) {
+  const t = useTranslations();
   const isAll = viewMode === 'all';
   return (
     <label className="wa:flex wa:items-center wa:gap-2 wa:flex-shrink-0 wa:cursor-pointer wa:select-none">
@@ -243,7 +247,7 @@ function ViewModeToggle({ viewMode, onViewModeChange }: { viewMode: ViewMode; on
           )}
         />
       </button>
-      <span className="wa:text-xs wa:text-[#8696a0] wa:whitespace-nowrap">Merge devices</span>
+      <span className="wa:text-xs wa:text-[#8696a0] wa:whitespace-nowrap">{t('instanceSelector.mergeDevices')}</span>
     </label>
   );
 }
