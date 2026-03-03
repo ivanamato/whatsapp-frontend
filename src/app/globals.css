@@ -1,0 +1,217 @@
+@import "tailwindcss" prefix(wa);
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--wa-background);
+  --color-foreground: var(--wa-foreground);
+  --color-sidebar-ring: var(--wa-sidebar-ring);
+  --color-sidebar-border: var(--wa-sidebar-border);
+  --color-sidebar-accent-foreground: var(--wa-sidebar-accent-foreground);
+  --color-sidebar-accent: var(--wa-sidebar-accent);
+  --color-sidebar-primary-foreground: var(--wa-sidebar-primary-foreground);
+  --color-sidebar-primary: var(--wa-sidebar-primary);
+  --color-sidebar-foreground: var(--wa-sidebar-foreground);
+  --color-sidebar: var(--wa-sidebar);
+  --color-chart-5: var(--wa-chart-5);
+  --color-chart-4: var(--wa-chart-4);
+  --color-chart-3: var(--wa-chart-3);
+  --color-chart-2: var(--wa-chart-2);
+  --color-chart-1: var(--wa-chart-1);
+  --color-ring: var(--wa-ring);
+  --color-input: var(--wa-input);
+  --color-border: var(--wa-border);
+  --color-destructive: var(--wa-destructive);
+  --color-accent-foreground: var(--wa-accent-foreground);
+  --color-accent: var(--wa-accent);
+  --color-muted-foreground: var(--wa-muted-foreground);
+  --color-muted: var(--wa-muted);
+  --color-secondary-foreground: var(--wa-secondary-foreground);
+  --color-secondary: var(--wa-secondary);
+  --color-primary-foreground: var(--wa-primary-foreground);
+  --color-primary: var(--wa-primary);
+  --color-popover-foreground: var(--wa-popover-foreground);
+  --color-popover: var(--wa-popover);
+  --color-card-foreground: var(--wa-card-foreground);
+  --color-card: var(--wa-card);
+  --radius-sm: calc(var(--wa-radius) - 4px);
+  --radius-md: calc(var(--wa-radius) - 2px);
+  --radius-lg: var(--wa-radius);
+  --radius-xl: calc(var(--wa-radius) + 4px);
+}
+
+:root {
+  --wa-radius: 0.5rem;
+  --wa-background: #f0f2f5;
+  --wa-foreground: #111b21;
+  --wa-card: #ffffff;
+  --wa-card-foreground: #111b21;
+  --wa-popover: #ffffff;
+  --wa-popover-foreground: #111b21;
+  --wa-primary: #00a884;
+  --wa-primary-foreground: #ffffff;
+  --wa-secondary: #f0f2f5;
+  --wa-secondary-foreground: #111b21;
+  --wa-muted: #f0f2f5;
+  --wa-muted-foreground: #667781;
+  --wa-accent: #f0f2f5;
+  --wa-accent-foreground: #111b21;
+  --wa-destructive: oklch(0.577 0.245 27.325);
+  --wa-border: #e9edef;
+  --wa-input: #e9edef;
+  --wa-ring: #00a884;
+  --wa-chart-1: oklch(0.646 0.222 41.116);
+  --wa-chart-2: oklch(0.6 0.118 184.704);
+  --wa-chart-3: oklch(0.398 0.07 227.392);
+  --wa-chart-4: oklch(0.828 0.189 84.429);
+  --wa-chart-5: oklch(0.769 0.188 70.08);
+  --wa-sidebar: #ffffff;
+  --wa-sidebar-foreground: #111b21;
+  --wa-sidebar-primary: #00a884;
+  --wa-sidebar-primary-foreground: #ffffff;
+  --wa-sidebar-accent: #f0f2f5;
+  --wa-sidebar-accent-foreground: #111b21;
+  --wa-sidebar-border: #e9edef;
+  --wa-sidebar-ring: #00a884;
+}
+
+.dark {
+  --wa-background: oklch(0.145 0 0);
+  --wa-foreground: oklch(0.985 0 0);
+  --wa-card: oklch(0.205 0 0);
+  --wa-card-foreground: oklch(0.985 0 0);
+  --wa-popover: oklch(0.205 0 0);
+  --wa-popover-foreground: oklch(0.985 0 0);
+  --wa-primary: oklch(0.922 0 0);
+  --wa-primary-foreground: oklch(0.205 0 0);
+  --wa-secondary: oklch(0.269 0 0);
+  --wa-secondary-foreground: oklch(0.985 0 0);
+  --wa-muted: oklch(0.269 0 0);
+  --wa-muted-foreground: oklch(0.708 0 0);
+  --wa-accent: oklch(0.269 0 0);
+  --wa-accent-foreground: oklch(0.985 0 0);
+  --wa-destructive: oklch(0.704 0.191 22.216);
+  --wa-border: oklch(1 0 0 / 10%);
+  --wa-input: oklch(1 0 0 / 15%);
+  --wa-ring: oklch(0.556 0 0);
+  --wa-chart-1: oklch(0.488 0.243 264.376);
+  --wa-chart-2: oklch(0.696 0.17 162.48);
+  --wa-chart-3: oklch(0.769 0.188 70.08);
+  --wa-chart-4: oklch(0.627 0.265 303.9);
+  --wa-chart-5: oklch(0.645 0.246 16.439);
+  --wa-sidebar: oklch(0.205 0 0);
+  --wa-sidebar-foreground: oklch(0.985 0 0);
+  --wa-sidebar-primary: oklch(0.488 0.243 264.376);
+  --wa-sidebar-primary-foreground: oklch(0.985 0 0);
+  --wa-sidebar-accent: oklch(0.269 0 0);
+  --wa-sidebar-accent-foreground: oklch(0.985 0 0);
+  --wa-sidebar-border: oklch(1 0 0 / 10%);
+  --wa-sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply wa:border-border wa:outline-ring/50;
+  }
+}
+
+/* Fix ScrollArea table layout breaking text truncation */
+[data-radix-scroll-area-viewport] > div {
+  display: block !important;
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
+/* WhatsApp Web chat wallpaper pattern */
+.wa-chat-bg {
+  background-color: #efeae2;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200' opacity='0.06'%3E%3Cdefs%3E%3Cstyle%3Ecircle,path,rect%7Bfill:%23111b21%7D%3C/style%3E%3C/defs%3E%3Ccircle cx='20' cy='20' r='2'/%3E%3Crect x='60' y='15' width='8' height='10' rx='1'/%3E%3Cpath d='M105 18 l6-6 l6 6 l-3 0 l0 6 l-6 0 l0-6z'/%3E%3Ccircle cx='160' cy='20' r='3.5' fill='none' stroke='%23111b21' stroke-width='1.5'/%3E%3Cpath d='M15 70 q5-8 10 0 q5 8 10 0' fill='none' stroke='%23111b21' stroke-width='1.2'/%3E%3Crect x='70' y='65' width='10' height='7' rx='3.5'/%3E%3Ccircle cx='120' cy='70' r='4' fill='none' stroke='%23111b21' stroke-width='1.2'/%3E%3Cpath d='M165 68 l0 8 M161 72 l8 0' stroke='%23111b21' stroke-width='1.5'/%3E%3Cpath d='M18 125 l4-7 l4 7z' fill='none' stroke='%23111b21' stroke-width='1.2'/%3E%3Ccircle cx='72' cy='123' r='1.5'/%3E%3Ccircle cx='78' cy='123' r='1.5'/%3E%3Ccircle cx='75' cy='128' r='1.5'/%3E%3Crect x='115' y='120' width='9' height='9' rx='1' fill='none' stroke='%23111b21' stroke-width='1.2'/%3E%3Cpath d='M160 120 a6 6 0 1 1 0 12' fill='none' stroke='%23111b21' stroke-width='1.2'/%3E%3Ccircle cx='30' cy='175' r='3' fill='none' stroke='%23111b21' stroke-width='1.2'/%3E%3Cpath d='M75 172 l5 8 l5-8' fill='none' stroke='%23111b21' stroke-width='1.2'/%3E%3Crect x='122' y='170' width='6' height='9' rx='1' fill='none' stroke='%23111b21' stroke-width='1.2'/%3E%3Cpath d='M170 178 l-5-8 l10 0z'/%3E%3C/svg%3E");
+}
+
+/* Bubble tails */
+.wa-bubble-out {
+  position: relative;
+}
+.wa-bubble-out::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: -8px;
+  width: 8px;
+  height: 13px;
+  background: #d9fdd3;
+  clip-path: polygon(0 0, 0 100%, 100% 0);
+}
+
+.wa-bubble-in {
+  position: relative;
+}
+.wa-bubble-in::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -8px;
+  width: 8px;
+  height: 13px;
+  background: #ffffff;
+  clip-path: polygon(100% 0, 0 0, 100% 100%);
+}
+
+/* WhatsApp-style scrollbar */
+.wa-chat-bg [data-radix-scroll-area-viewport]::-webkit-scrollbar {
+  width: 6px;
+}
+.wa-chat-bg [data-radix-scroll-area-viewport]::-webkit-scrollbar-track {
+  background: transparent;
+}
+.wa-chat-bg [data-radix-scroll-area-viewport]::-webkit-scrollbar-thumb {
+  background: #00a884;
+  border-radius: 3px;
+}
+
+/* Global scrollbar style */
+[data-radix-scroll-area-viewport]::-webkit-scrollbar {
+  width: 6px;
+}
+[data-radix-scroll-area-viewport]::-webkit-scrollbar-track {
+  background: transparent;
+}
+[data-radix-scroll-area-viewport]::-webkit-scrollbar-thumb {
+  background: #00a884;
+  border-radius: 3px;
+}
+
+/* Responsive sidebar layout — Tailwind v4 prefix(wa) breaks responsive variants (md:wa:*),
+   so we use plain CSS media queries for the sidebar/content toggle. */
+@media (min-width: 768px) {
+  .wa-sidebar {
+    width: 24rem;
+    min-width: 24rem;
+    flex-shrink: 0;
+  }
+  .wa-sidebar.wa-sidebar--hidden {
+    display: flex;
+  }
+  .wa-content--hidden {
+    display: flex !important;
+  }
+}
+
+@media (max-width: 767px) {
+  .wa-sidebar--hidden {
+    display: none;
+  }
+  .wa-content--hidden {
+    display: none;
+  }
+  .wa-back-btn {
+    display: inline-flex;
+  }
+}
+
+@media (min-width: 768px) {
+  .wa-back-btn {
+    display: none;
+  }
+}

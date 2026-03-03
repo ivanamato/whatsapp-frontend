@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WhatsApp Inbox — Vue 3 Example</title>
+    <!-- Load the compiled library CSS -->
+    <link rel="stylesheet" href="../../dist/whatsapp-inbox.css" />
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body, #app { height: 100%; }
+      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+
+      .config-form {
+        max-width: 500px;
+        margin: 80px auto;
+        padding: 32px;
+        border: 1px solid #e9edef;
+        border-radius: 12px;
+        background: #fff;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+      }
+      .config-form h2 {
+        margin-bottom: 4px;
+        color: #111b21;
+      }
+      .config-form p {
+        margin-bottom: 20px;
+        color: #667781;
+        font-size: 14px;
+      }
+      .form-group {
+        margin-bottom: 16px;
+      }
+      .form-group label {
+        display: block;
+        margin-bottom: 4px;
+        font-size: 13px;
+        font-weight: 500;
+        color: #111b21;
+      }
+      .form-group input {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid #d1d7db;
+        border-radius: 8px;
+        font-size: 14px;
+        outline: none;
+        transition: border-color 0.2s;
+      }
+      .form-group input:focus {
+        border-color: #00a884;
+      }
+      .btn {
+        width: 100%;
+        padding: 12px;
+        background: #00a884;
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        font-size: 15px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+      .btn:hover {
+        background: #008f72;
+      }
+      .btn-secondary {
+        position: fixed;
+        top: 12px;
+        right: 12px;
+        width: auto;
+        padding: 8px 16px;
+        font-size: 13px;
+        background: #111b21;
+        border-radius: 6px;
+        z-index: 9999;
+      }
+      .btn-secondary:hover {
+        background: #233138;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+
+    <!-- Vue 3 from CDN -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <!-- Compiled WhatsApp Inbox library (UMD) -->
+    <script src="../../dist/whatsapp-inbox.umd.js"></script>
+
+    <script>
+      const { createApp, ref, onMounted, onBeforeUnmount, nextTick } = Vue;
+
+      const App = {
+        setup() {
+          const mounted = ref(false);
+          const inboxRef = ref(null);
+          const inboxContainer = ref(null);
+
+          // Form fields
+          const apiUrl = ref(localStorage.getItem('wa_apiUrl') || '');
+          const apiKey = ref(localStorage.getItem('wa_apiKey') || '');
+          const instanceName = ref(localStorage.getItem('wa_instanceName') || '');
+          const label = ref(localStorage.getItem('wa_label') || '');
+
+          async function mountInbox() {
+            // Save to localStorage for convenience
+            localStorage.setItem('wa_apiUrl', apiUrl.value);
+            localStorage.setItem('wa_apiKey', apiKey.value);
+            localStorage.setItem('wa_instanceName', instanceName.value);
+            localStorage.setItem('wa_label', label.value);
+
+            mounted.value = true;
+
+            await nextTick();
+
+            const config = {
+              devices: [
+                {
+                  id: 'device-1',
+                  label: label.value || instanceName.value,
+                  apiUrl: apiUrl.value,
+                  apiKey: apiKey.value,
+                  instanceName: instanceName.value,
+                  providerType: 'evolution',
+                },
+              ],
+              defaultDeviceId: 'device-1',
+            };
+
+            inboxRef.value = WhatsAppInbox.mount(inboxContainer.value, config);
+          }
+
+          function unmountInbox() {
+            if (inboxRef.value) {
+              inboxRef.value.unmount();
+              inboxRef.value = null;
+            }
+            mounted.value = false;
+          }
+
+          // Auto-mount if we have saved config
+          onMounted(() => {
+            if (apiUrl.value && apiKey.value && instanceName.value) {
+              mountInbox();
+            }
+          });
+
+          onBeforeUnmount(() => {
+            if (inboxRef.value) {
+              inboxRef.value.unmount();
+            }
+          });
+
+          return {
+            mounted,
+            inboxContainer,
+            apiUrl,
+            apiKey,
+            instanceName,
+            label,
+            mountInbox,
+            unmountInbox,
+          };
+        },
+
+        template: `
+          <!-- Config form -->
+          <div v-if="!mounted" class="config-form">
+            <h2>WhatsApp Inbox</h2>
+            <p>Connect to your Evolution API instance.</p>
+
+            <div class="form-group">
+              <label>API URL</label>
+              <input v-model="apiUrl" placeholder="https://your-evolution-api.com" />
+            </div>
+
+            <div class="form-group">
+              <label>API Key</label>
+              <input v-model="apiKey" type="password" placeholder="your-api-key" />
+            </div>
+
+            <div class="form-group">
+              <label>Instance Name</label>
+              <input v-model="instanceName" placeholder="my-whatsapp" />
+            </div>
+
+            <div class="form-group">
+              <label>Label (optional)</label>
+              <input v-model="label" placeholder="My WhatsApp" />
+            </div>
+
+            <button class="btn" @click="mountInbox" :disabled="!apiUrl || !apiKey || !instanceName">
+              Connect
+            </button>
+          </div>
+
+          <!-- Inbox container -->
+          <div v-show="mounted" ref="inboxContainer" style="height: 100%;"></div>
+
+          <!-- Disconnect button -->
+          <button v-if="mounted" class="btn btn-secondary" @click="unmountInbox">
+            Disconnect
+          </button>
+        `,
+      };
+
+      createApp(App).mount('#app');
+    </script>
+  </body>
+</html>
