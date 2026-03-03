@@ -1,6 +1,6 @@
 import { createContext, useContext, useMemo, useState, useCallback, type PropsWithChildren } from 'react';
 import { EvolutionProvider } from './providers/evolution';
-import type { WhatsAppProvider, ProviderType, DeviceConfig, WhatsAppMultiDeviceConfig } from './providers/types';
+import type { WhatsAppProvider, ProviderType, DeviceConfig, WhatsAppMultiDeviceConfig, ViewMode } from './providers/types';
 
 // --- Provider registry: one provider per unique (apiUrl, apiKey, providerType) ---
 
@@ -37,6 +37,8 @@ export type DeviceContextValue = {
   selectDevice: (deviceId: string) => void;
   getProviderForDevice: (device: DeviceConfig) => WhatsAppProvider;
   readonly: boolean;
+  viewMode: ViewMode;
+  setViewMode: (mode: ViewMode) => void;
 };
 
 const DeviceContext = createContext<DeviceContextValue | null>(null);
@@ -50,6 +52,8 @@ export function ProviderProvider({ config, children }: PropsWithChildren<{ confi
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(
     config.defaultDeviceId || (devices.length > 0 ? devices[0].id : null)
   );
+
+  const [viewMode, setViewMode] = useState<ViewMode>('single');
 
   const selectedDevice = useMemo(() => {
     return devices.find(d => d.id === selectedDeviceId) || devices[0] || null;
@@ -78,7 +82,9 @@ export function ProviderProvider({ config, children }: PropsWithChildren<{ confi
     selectDevice,
     getProviderForDevice: getProviderForDeviceFn,
     readonly: isReadonly,
-  }), [devices, selectedDevice, selectDevice, getProviderForDeviceFn, isReadonly]);
+    viewMode,
+    setViewMode,
+  }), [devices, selectedDevice, selectDevice, getProviderForDeviceFn, isReadonly, viewMode]);
 
   return (
     <DeviceContext.Provider value={deviceContextValue}>

@@ -1,16 +1,10 @@
-import { useEffect, useState, useCallback } from 'react';
-import { ChevronDown, WifiOff, Loader2, Check } from 'lucide-react';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { ChevronDown, WifiOff, Loader2, Check, XIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAutoPolling } from '@/hooks/use-auto-polling';
 import { Badge } from '@/components/ui/badge';
 import { useDeviceContext } from '@/lib/provider-context';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import type { DeviceConfig } from '@/lib/providers/types';
+import type { DeviceConfig, ViewMode } from '@/lib/providers/types';
 
 type DeviceStatus = 'open' | 'close' | 'connecting' | 'loading';
 
@@ -19,7 +13,7 @@ type Props = {
 };
 
 export function InstanceSelector({ onDeviceChange }: Props) {
-  const { devices, selectedDevice, selectDevice, getProviderForDevice } = useDeviceContext();
+  const { devices, selectedDevice, selectDevice, getProviderForDevice, viewMode, setViewMode } = useDeviceContext();
   const [statuses, setStatuses] = useState<Record<string, DeviceStatus>>({});
   const [open, setOpen] = useState(false);
   const [initialLoad, setInitialLoad] = useState(true);
@@ -89,27 +83,50 @@ export function InstanceSelector({ onDeviceChange }: Props) {
     );
   }
 
+  const connectedCount = devices.filter(d => statuses[d.id] === 'open').length;
+  const showToggle = devices.length > 1;
+
   return (
     <>
-      <button
-        onClick={() => setOpen(true)}
-        className="wa:flex wa:items-center wa:justify-center wa:gap-3 wa:px-4 wa:py-3 wa:rounded-lg hover:wa:bg-white/10 wa:transition-colors wa:w-full"
-      >
-        <StatusDot status={selectedDevice ? (statuses[selectedDevice.id] || 'close') : 'close'} />
-        <span className="wa:text-base wa:font-medium wa:text-[#e9edef] wa:truncate">
-          {selectedDevice?.label || selectedDevice?.instanceName || 'Select device'}
-        </span>
-        <Badge variant="outline" className="wa:text-xs wa:px-2 wa:py-0.5 wa:h-5 wa:uppercase wa:text-[#8696a0] wa:border-[#8696a0]/40">
-          {(selectedDevice?.providerType || 'evolution') === 'evolution' ? 'EVO' : 'CLOUD'}
-        </Badge>
-        <ChevronDown className="wa:h-5 wa:w-5 wa:text-[#8696a0]" />
-      </button>
+      <div className="wa:flex wa:items-center wa:gap-2 wa:w-full">
+        {/* View mode toggle — hidden if only 1 device */}
+        {showToggle && (
+          <ViewModeToggle viewMode={viewMode} onViewModeChange={setViewMode} />
+        )}
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="wa:bg-[#111b21] wa:border-[#3b4a54] wa:max-w-md" style={{ padding: 32 }}>
-          <DialogHeader className="wa:mb-2">
-            <DialogTitle className="wa:text-[#e9edef] wa:text-center">Select Device</DialogTitle>
-          </DialogHeader>
+        {/* Single mode: device picker button */}
+        {viewMode === 'single' ? (
+          <button
+            onClick={() => setOpen(true)}
+            className="wa:flex wa:flex-1 wa:items-center wa:justify-center wa:gap-3 wa:px-4 wa:py-3 wa:rounded-lg hover:wa:bg-white/10 wa:transition-colors wa:min-w-0"
+          >
+            <StatusDot status={selectedDevice ? (statuses[selectedDevice.id] || 'close') : 'close'} />
+            <span className="wa:text-base wa:font-medium wa:text-[#e9edef] wa:truncate">
+              {selectedDevice?.label || selectedDevice?.instanceName || 'Select device'}
+            </span>
+            <Badge variant="outline" className="wa:text-xs wa:px-2 wa:py-0.5 wa:h-5 wa:uppercase wa:text-[#8696a0] wa:border-[#8696a0]/40">
+              {(selectedDevice?.providerType || 'evolution') === 'evolution' ? 'EVO' : 'CLOUD'}
+            </Badge>
+            <ChevronDown className="wa:h-5 wa:w-5 wa:text-[#8696a0]" />
+          </button>
+        ) : (
+          /* All mode: summary label */
+          <div className="wa:flex wa:flex-1 wa:items-center wa:justify-center wa:gap-3 wa:px-4 wa:py-3 wa:min-w-0">
+            <span className="wa:text-base wa:font-medium wa:text-[#e9edef] wa:truncate">
+              All Devices
+            </span>
+            <Badge variant="outline" className="wa:text-xs wa:text-[#8696a0] wa:border-[#8696a0]/40" style={{ padding: '4px 12px' }}>
+              {connectedCount} connected
+            </Badge>
+          </div>
+        )}
+      </div>
+
+      {open && viewMode === 'single' && (
+        <SimpleModal onClose={() => setOpen(false)}>
+          <div className="wa:mb-2 wa:flex wa:flex-col wa:gap-2 wa:text-center">
+            <h2 className="wa:text-lg wa:leading-none wa:font-semibold wa:text-[#e9edef]">Select Device</h2>
+          </div>
           <div className="wa:flex wa:flex-col wa:gap-3">
             {devices.map((device) => (
               <DeviceOption
@@ -124,9 +141,45 @@ export function InstanceSelector({ onDeviceChange }: Props) {
               />
             ))}
           </div>
-        </DialogContent>
-      </Dialog>
+        </SimpleModal>
+      )}
     </>
+  );
+}
+
+function SimpleModal({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+  const overlayRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [onClose]);
+
+  return (
+    <div
+      ref={overlayRef}
+      className="wa:fixed wa:inset-0 wa:z-50 wa:bg-black/50 wa:flex wa:items-center wa:justify-center"
+      onClick={(e) => { if (e.target === overlayRef.current) onClose(); }}
+    >
+      <div
+        className="wa:bg-[#111b21] wa:border wa:border-[#3b4a54] wa:max-w-md wa:w-full wa:max-w-[calc(100%-2rem)] wa:rounded-lg wa:shadow-lg wa:relative"
+        style={{ padding: 32 }}
+        role="dialog"
+        aria-modal="true"
+      >
+        <button
+          onClick={onClose}
+          className="wa:absolute wa:top-4 wa:right-4 wa:rounded-xs wa:opacity-70 wa:transition-opacity hover:wa:opacity-100 wa:text-[#8696a0]"
+        >
+          <XIcon className="wa:h-4 wa:w-4" />
+          <span className="wa:sr-only">Close</span>
+        </button>
+        {children}
+      </div>
+    </div>
   );
 }
 
@@ -167,6 +220,31 @@ function DeviceOption({
         <Check className="wa:h-5 wa:w-5 wa:text-[#00a884] wa:flex-shrink-0" />
       )}
     </button>
+  );
+}
+
+function ViewModeToggle({ viewMode, onViewModeChange }: { viewMode: ViewMode; onViewModeChange: (mode: ViewMode) => void }) {
+  const isAll = viewMode === 'all';
+  return (
+    <label className="wa:flex wa:items-center wa:gap-2 wa:flex-shrink-0 wa:cursor-pointer wa:select-none">
+      <button
+        role="switch"
+        aria-checked={isAll}
+        onClick={() => onViewModeChange(isAll ? 'single' : 'all')}
+        className={cn(
+          'wa:relative wa:inline-flex wa:h-5 wa:w-9 wa:items-center wa:rounded-full wa:transition-colors wa:flex-shrink-0',
+          isAll ? 'wa:bg-[#00a884]' : 'wa:bg-[#3b4a54]'
+        )}
+      >
+        <span
+          className={cn(
+            'wa:inline-block wa:h-3.5 wa:w-3.5 wa:rounded-full wa:bg-white wa:transition-transform',
+            isAll ? 'wa:translate-x-[18px]' : 'wa:translate-x-[3px]'
+          )}
+        />
+      </button>
+      <span className="wa:text-xs wa:text-[#8696a0] wa:whitespace-nowrap">Merge devices</span>
+    </label>
   );
 }
 

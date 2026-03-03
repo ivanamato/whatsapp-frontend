@@ -9,10 +9,12 @@ type Conversation = {
   phoneNumber: string;
   contactName?: string;
   profilePicUrl?: string;
+  deviceId?: string;
+  deviceLabel?: string;
 };
 
 export function App() {
-  const { selectedDevice, readonly: isReadonly } = useDeviceContext();
+  const { selectedDevice, readonly: isReadonly, viewMode, devices, getProviderForDevice } = useDeviceContext();
   const [selectedConversation, setSelectedConversation] = useState<Conversation>();
   const conversationListRef = useRef<ConversationListRef>(null);
 
@@ -25,12 +27,39 @@ export function App() {
     }
   }, [selectedDevice]);
 
+  // Clear conversation when view mode changes
+  const prevViewModeRef = useRef(viewMode);
+  useEffect(() => {
+    if (prevViewModeRef.current !== viewMode) {
+      prevViewModeRef.current = viewMode;
+      setSelectedConversation(undefined);
+    }
+  }, [viewMode]);
+
   const handleDeviceChange = useCallback((_device: { instanceName: string; provider: 'evolution' | 'cloud' } | null) => {
     // Device selection is managed by context; this callback is for future use
   }, []);
 
-  const instance = selectedDevice?.instanceName;
-  const provider = (selectedDevice?.providerType || 'evolution') as 'evolution' | 'cloud';
+  // Resolve instance, provider type, readonly, and providerOverride based on view mode
+  const chatDevice = viewMode === 'all' && selectedConversation?.deviceId
+    ? devices.find(d => d.id === selectedConversation.deviceId)
+    : undefined;
+
+  const instance = viewMode === 'all'
+    ? chatDevice?.instanceName
+    : selectedDevice?.instanceName;
+
+  const provider = viewMode === 'all'
+    ? ((chatDevice?.providerType || 'evolution') as 'evolution' | 'cloud')
+    : ((selectedDevice?.providerType || 'evolution') as 'evolution' | 'cloud');
+
+  const effectiveReadOnly = viewMode === 'all'
+    ? (chatDevice?.readonly ?? false)
+    : isReadonly;
+
+  const providerOverride = viewMode === 'all' && chatDevice
+    ? getProviderForDevice(chatDevice)
+    : undefined;
 
   const handleTemplateSent = async (phoneNumber: string) => {
     const conversations = await conversationListRef.current?.refresh();
@@ -65,9 +94,13 @@ export function App() {
         <ConversationList
           ref={conversationListRef}
           onSelectConversation={setSelectedConversation}
-          selectedConversationId={selectedConversation?.id}
+          selectedConversationId={
+            viewMode === 'all' && selectedConversation?.deviceId
+              ? `${selectedConversation.deviceId}::${selectedConversation.id}`
+              : selectedConversation?.id
+          }
           isHidden={!!selectedConversation}
-          instance={instance}
+          instance={selectedDevice?.instanceName}
           provider={provider}
         />
         <MessageView
@@ -80,7 +113,8 @@ export function App() {
           isVisible={!!selectedConversation}
           instance={instance}
           provider={provider}
-          readOnly={isReadonly}
+          readOnly={effectiveReadOnly}
+          providerOverride={providerOverride}
         />
         </div>
       </div>

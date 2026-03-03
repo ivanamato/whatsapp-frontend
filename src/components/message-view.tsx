@@ -14,6 +14,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useProvider } from '@/lib/provider-context';
+import type { WhatsAppProvider } from '@/lib/providers/types';
 
 type Message = {
   id: string;
@@ -166,10 +167,12 @@ type Props = {
   instance?: string;
   provider?: string;
   readOnly?: boolean;
+  providerOverride?: WhatsAppProvider;
 };
 
-export function MessageView({ conversationId, phoneNumber, contactName, profilePicUrl, onTemplateSent, onBack, isVisible = false, instance, provider: providerType, readOnly = false }: Props) {
-  const provider = useProvider();
+export function MessageView({ conversationId, phoneNumber, contactName, profilePicUrl, onTemplateSent, onBack, isVisible = false, instance, provider: providerType, readOnly = false, providerOverride }: Props) {
+  const contextProvider = useProvider();
+  const provider = providerOverride || contextProvider;
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);

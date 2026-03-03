@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { useProvider } from '@/lib/provider-context';
+import { useProvider, useDeviceContext } from '@/lib/provider-context';
 
 type Conversation = {
   id: string;
@@ -22,6 +22,8 @@ type Conversation = {
     type?: string;
   };
   unreadCount?: number;
+  deviceId?: string;
+  deviceLabel?: string;
 };
 
 function formatConversationDate(timestamp: string): string {
@@ -70,31 +72,71 @@ export type ConversationListRef = {
 export const ConversationList = forwardRef<ConversationListRef, Props>(
   ({ onSelectConversation, selectedConversationId, isHidden = false, instance }, ref) => {
   const provider = useProvider();
+  const { viewMode, devices, getProviderForDevice } = useDeviceContext();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
 
+  const doFetch = useCallback(async (): Promise<Conversation[]> => {
+    if (viewMode === 'all') {
+      const results = await Promise.allSettled(
+        devices.map(async (device) => {
+          const deviceProvider = getProviderForDevice(device);
+          const chats = await deviceProvider.findChats(device.instanceName);
+          return chats.map((chat) => ({
+            id: chat.id,
+            phoneNumber: chat.phoneNumber,
+            status: 'active',
+            lastActiveAt: chat.lastActiveAt || '',
+            contactName: chat.contactName,
+            profilePicUrl: chat.profilePicUrl,
+            lastMessage: chat.lastMessage,
+            unreadCount: chat.unreadCount,
+            deviceId: device.id,
+            deviceLabel: device.label || device.instanceName,
+          }));
+        })
+      );
+      const merged: Conversation[] = [];
+      for (const result of results) {
+        if (result.status === 'fulfilled') {
+          merged.push(...result.value);
+        }
+      }
+      merged.sort((a, b) => {
+        if (!a.lastActiveAt) return 1;
+        if (!b.lastActiveAt) return -1;
+        return new Date(b.lastActiveAt).getTime() - new Date(a.lastActiveAt).getTime();
+      });
+      return merged;
+    }
+
+    // Single mode
+    if (!instance) return [];
+    const chats = await provider.findChats(instance);
+    return chats.map((chat) => ({
+      id: chat.id,
+      phoneNumber: chat.phoneNumber,
+      status: 'active',
+      lastActiveAt: chat.lastActiveAt || '',
+      contactName: chat.contactName,
+      profilePicUrl: chat.profilePicUrl,
+      lastMessage: chat.lastMessage,
+      unreadCount: chat.unreadCount,
+    }));
+  }, [viewMode, devices, getProviderForDevice, instance, provider]);
+
   const fetchConversations = useCallback(async () => {
-    if (!instance) {
+    if (viewMode === 'single' && !instance) {
       setConversations([]);
       setLoading(false);
       return;
     }
 
     try {
-      const chats = await provider.findChats(instance);
-      const mapped: Conversation[] = chats.map((chat) => ({
-        id: chat.id,
-        phoneNumber: chat.phoneNumber,
-        status: 'active',
-        lastActiveAt: chat.lastActiveAt || '',
-        contactName: chat.contactName,
-        profilePicUrl: chat.profilePicUrl,
-        lastMessage: chat.lastMessage,
-        unreadCount: chat.unreadCount,
-      }));
+      const mapped = await doFetch();
       setConversations(mapped);
     } catch (error) {
       console.error('Error fetching conversations:', error);
@@ -102,7 +144,7 @@ export const ConversationList = forwardRef<ConversationListRef, Props>(
       setLoading(false);
       setRefreshing(false);
     }
-  }, [instance, provider]);
+  }, [viewMode, instance, doFetch]);
 
   useEffect(() => {
     setLoading(true);
@@ -116,7 +158,7 @@ export const ConversationList = forwardRef<ConversationListRef, Props>(
 
   const { isPolling } = useAutoPolling({
     interval: 10000,
-    enabled: !!instance,
+    enabled: viewMode === 'all' || !!instance,
     onPoll: fetchConversations
   });
 
@@ -129,20 +171,10 @@ export const ConversationList = forwardRef<ConversationListRef, Props>(
 
   useImperativeHandle(ref, () => ({
     refresh: async () => {
-      if (!instance) return [];
+      if (viewMode === 'single' && !instance) return [];
       setRefreshing(true);
       try {
-        const chats = await provider.findChats(instance);
-        const mapped: Conversation[] = chats.map((chat) => ({
-          id: chat.id,
-          phoneNumber: chat.phoneNumber,
-          status: 'active',
-          lastActiveAt: chat.lastActiveAt || '',
-          contactName: chat.contactName,
-          profilePicUrl: chat.profilePicUrl,
-          lastMessage: chat.lastMessage,
-          unreadCount: chat.unreadCount,
-        }));
+        const mapped = await doFetch();
         setConversations(mapped);
         setRefreshing(false);
         return mapped;
@@ -158,7 +190,8 @@ export const ConversationList = forwardRef<ConversationListRef, Props>(
     const query = searchQuery.toLowerCase();
     return (
       conv.phoneNumber.toLowerCase().includes(query) ||
-      conv.contactName?.toLowerCase().includes(query)
+      conv.contactName?.toLowerCase().includes(query) ||
+      conv.deviceLabel?.toLowerCase().includes(query)
     );
   });
 
@@ -191,8 +224,8 @@ export const ConversationList = forwardRef<ConversationListRef, Props>(
     );
   }
 
-  // No instance selected
-  if (!instance) {
+  // No instance selected (only in single mode)
+  if (viewMode === 'single' && !instance) {
     return (
       <div className={cn(
         "wa-sidebar wa:w-full wa:border-r wa:border-[#e9edef] wa:bg-white wa:flex wa:flex-col wa:items-center wa:justify-center",
@@ -264,19 +297,27 @@ export const ConversationList = forwardRef<ConversationListRef, Props>(
           </div>
         ) : (
           <div className="wa:w-full wa:overflow-hidden">
-          {filteredConversations.map((conversation) => (
+          {filteredConversations.map((conversation) => {
+            const compositeKey = conversation.deviceId
+              ? `${conversation.deviceId}::${conversation.id}`
+              : conversation.id;
+            const isSelected = viewMode === 'all'
+              ? selectedConversationId === compositeKey
+              : selectedConversationId === conversation.id;
+
+            return (
             <button
-              key={conversation.id}
+              key={compositeKey}
               onClick={() => onSelectConversation(conversation)}
               className={cn(
                 'wa:w-full wa:text-left wa:transition-colors wa:relative wa:overflow-hidden wa:flex wa:items-center wa:cursor-pointer',
                 'hover:wa:bg-[#f5f6f6]',
-                selectedConversationId === conversation.id && 'wa:bg-[#f0f2f5]'
+                isSelected && 'wa:bg-[#f0f2f5]'
               )}
               style={{ padding: '5px 15px 5px 13px' }}
             >
               {/* Green left accent bar for selected conversation */}
-              {selectedConversationId === conversation.id && (
+              {isSelected && (
                 <div className="wa:absolute wa:left-0 wa:top-0 wa:bottom-0 wa:w-[3px] wa:bg-[#00a884]" />
               )}
 
@@ -303,6 +344,12 @@ export const ConversationList = forwardRef<ConversationListRef, Props>(
                       {formatConversationDate(conversation.lastActiveAt)}
                     </span>
                   </div>
+                  {/* Device badge in all-devices mode */}
+                  {viewMode === 'all' && conversation.deviceLabel && (
+                    <p className="wa:text-[11px] wa:text-[#667781] wa:truncate wa:leading-[14px]">
+                      {conversation.deviceLabel}
+                    </p>
+                  )}
                   <div className="wa:flex wa:justify-between wa:items-center wa:gap-2 wa:mt-[2px]">
                     {conversation.lastMessage ? (
                       <p className="wa:text-[14px] wa:text-[#667781] wa:truncate wa:leading-[20px]">
@@ -323,8 +370,8 @@ export const ConversationList = forwardRef<ConversationListRef, Props>(
                 </div>
               </div>
             </button>
-          ))
-          }
+            );
+          })}
           </div>
         )}
       </ScrollArea>

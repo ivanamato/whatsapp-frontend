@@ -2,6 +2,8 @@
 
 export type ProviderType = 'evolution' | 'cloud';
 
+export type ViewMode = 'single' | 'all';
+
 export type DeviceConfig = {
   id: string;
   label?: string;
