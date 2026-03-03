@@ -11,13 +11,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Available via `make` (run `make help` to list all):
 
 ```bash
-make install    # Install dependencies
-make dev        # Start Vite dev server (reads .env)
-make build      # Build library (ES + UMD + CSS + .d.ts) → dist/
-make preview    # Serve built library locally
-make lint       # Run ESLint
-make typecheck  # Run TypeScript type check
-make clean      # Remove dist and node_modules
+make install         # Install dependencies
+make dev             # Start Vite dev server (reads .env)
+make build           # Build library (ES + UMD + CSS + .d.ts) → dist/
+make preview         # Serve built library locally
+make lint            # Run ESLint
+make typecheck       # Run TypeScript type check
+make clean           # Remove dist and node_modules
+make release-minor   # Bump minor version, push, and create GitHub release
+make release-major   # Bump major version, push, and create GitHub release
 ```
 
 ## Architecture
@@ -29,8 +31,8 @@ Embeddable WhatsApp inbox UI library built with Vite (library mode) + React + Ta
 `src/index.ts` exports a `mount(element, config)` / `unmount(element)` API for framework-agnostic embedding, plus React components and types for direct React usage.
 
 ```ts
-import { mount } from 'whatsapp-inbox'
-import 'whatsapp-inbox/style.css'
+import { mount } from '@ivanamato/whatsapp-inbox'
+import '@ivanamato/whatsapp-inbox/style.css'
 
 const inbox = mount(el, { apiUrl, apiKey, defaultInstance })
 inbox.unmount()
@@ -74,6 +76,24 @@ Vite library mode produces:
 - `dist/whatsapp-inbox.umd.js` — UMD module
 - `dist/whatsapp-inbox.css` — Prefixed styles
 - `dist/index.d.ts` — TypeScript declarations
+
+## Publishing
+
+Package is published to GitHub Packages as `@ivanamato/whatsapp-inbox`. A GitHub Actions workflow (`.github/workflows/publish.yml`) automatically builds and publishes on every GitHub Release.
+
+- **Release commands:** `make release-minor` or `make release-major` bump the version, push the tag, and create a GitHub release (which triggers the publish workflow).
+- **Registry config:** `.npmrc` scopes `@ivanamato` to `https://npm.pkg.github.com`.
+- **`publishConfig`** in `package.json` points to GitHub Packages.
+
+To install in another project:
+
+```bash
+# .npmrc (one-time per project)
+@ivanamato:registry=https://npm.pkg.github.com
+
+# Install
+npm install @ivanamato/whatsapp-inbox
+```
 
 ## Environment
 

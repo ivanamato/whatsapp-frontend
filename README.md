@@ -16,6 +16,23 @@ Built with [Preact](https://preactjs.com/) + [Tailwind CSS v4](https://tailwindc
 - **Read-only mode** — View-only access per device
 - **CSS isolation** — All styles use the `wa:` prefix to avoid collisions with host apps
 
+## Installation
+
+Published to [GitHub Packages](https://github.com/ivanamato/whatsapp-frontend/packages) as `@ivanamato/whatsapp-inbox`.
+
+```bash
+# Add to .npmrc (one-time per project)
+echo "@ivanamato:registry=https://npm.pkg.github.com" >> .npmrc
+
+# Install
+npm install @ivanamato/whatsapp-inbox
+```
+
+> **Note:** You need a GitHub personal access token with `read:packages` scope. Add it to your `~/.npmrc`:
+> ```
+> //npm.pkg.github.com/:_authToken=YOUR_GITHUB_TOKEN
+> ```
+
 ## Quick Start
 
 ### Using the UMD bundle (any framework or plain HTML)
@@ -48,8 +65,8 @@ Built with [Preact](https://preactjs.com/) + [Tailwind CSS v4](https://tailwindc
 ### Using the ES module
 
 ```js
-import { mount } from 'whatsapp-inbox';
-import 'whatsapp-inbox/style.css';
+import { mount } from '@ivanamato/whatsapp-inbox';
+import '@ivanamato/whatsapp-inbox/style.css';
 
 const inbox = mount(document.getElementById('inbox'), {
   devices: [
@@ -146,12 +163,14 @@ Create a `devices.json` file in the project root (see [`devices.example.json`](.
 ### Commands
 
 ```bash
-make dev        # Start Vite dev server
-make build      # Build library → dist/
-make preview    # Preview the built library
-make lint       # Run ESLint
-make typecheck  # Run TypeScript type check
-make clean      # Remove dist/ and node_modules/
+make dev             # Start Vite dev server
+make build           # Build library → dist/
+make preview         # Preview the built library
+make lint            # Run ESLint
+make typecheck       # Run TypeScript type check
+make clean           # Remove dist/ and node_modules/
+make release-minor   # Bump minor, push tag, create release → publishes to GitHub Packages
+make release-major   # Bump major, push tag, create release → publishes to GitHub Packages
 ```
 
 ### Build Output
