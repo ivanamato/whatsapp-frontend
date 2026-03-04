@@ -35,7 +35,7 @@ export default defineConfig(({ command }) => ({
     preact(),
     tailwindcss(),
     serveDevicesJson(),
-    dts({ include: ['src'], insertTypesEntry: true, rollupTypes: false }),
+    dts({ include: ['src'], insertTypesEntry: true, rollupTypes: false, compilerOptions: { skipLibCheck: true } }),
   ],
   resolve: {
     alias: {

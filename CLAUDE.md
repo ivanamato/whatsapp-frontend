@@ -92,19 +92,14 @@ Vite library mode produces:
 
 ## Publishing
 
-Package is published to GitHub Packages as `@ivanamato/whatsapp-inbox`. A GitHub Actions workflow (`.github/workflows/publish.yml`) automatically builds and publishes on every GitHub Release.
+Package is published to [npm](https://www.npmjs.com/package/@ivanamato/whatsapp-inbox) as `@ivanamato/whatsapp-inbox`. A GitHub Actions workflow (`.github/workflows/publish.yml`) automatically builds and publishes on every GitHub Release using Trusted Publishing (OIDC).
 
 - **Release commands:** `just release-minor` or `just release-major` bump the version, push the tag, and create a GitHub release (which triggers the publish workflow). The justfile is gitignored.
-- **Registry config:** `.npmrc` scopes `@ivanamato` to `https://npm.pkg.github.com`.
-- **`publishConfig`** in `package.json` points to GitHub Packages.
+- **`publishConfig`** in `package.json` sets `"access": "public"`.
 
 To install in another project:
 
 ```bash
-# .npmrc (one-time per project)
-@ivanamato:registry=https://npm.pkg.github.com
-
-# Install
 npm install @ivanamato/whatsapp-inbox
 ```
 

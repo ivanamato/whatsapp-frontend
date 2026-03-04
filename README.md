@@ -18,20 +18,11 @@ Built with [Preact](https://preactjs.com/) + [Tailwind CSS v4](https://tailwindc
 
 ## Installation
 
-Published to [GitHub Packages](https://github.com/ivanamato/whatsapp-frontend/packages) as `@ivanamato/whatsapp-inbox`.
+Published to [npm](https://www.npmjs.com/package/@ivanamato/whatsapp-inbox) as `@ivanamato/whatsapp-inbox`.
 
 ```bash
-# Add to .npmrc (one-time per project)
-echo "@ivanamato:registry=https://npm.pkg.github.com" >> .npmrc
-
-# Install
 npm install @ivanamato/whatsapp-inbox
 ```
-
-> **Note:** You need a GitHub personal access token with `read:packages` scope. Add it to your `~/.npmrc`:
-> ```
-> //npm.pkg.github.com/:_authToken=YOUR_GITHUB_TOKEN
-> ```
 
 ## Quick Start
 
@@ -183,8 +174,8 @@ make preview         # Preview the built library
 make lint            # Run ESLint
 make typecheck       # Run TypeScript type check
 make clean           # Remove dist/ and node_modules/
-just release-minor   # Bump minor, push tag, create release → publishes to GitHub Packages
-just release-major   # Bump major, push tag, create release → publishes to GitHub Packages
+just release-minor   # Bump minor, push tag, create release → publishes to npm
+just release-major   # Bump major, push tag, create release → publishes to npm
 ```
 
 ### Build Output
