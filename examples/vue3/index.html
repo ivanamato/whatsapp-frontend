@@ -1,213 +1,191 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>WhatsApp Inbox — Vue 3 Example</title>
-    <!-- Load the compiled library CSS -->
-    <link rel="stylesheet" href="../../dist/whatsapp-inbox.css" />
-    <style>
-      * { margin: 0; padding: 0; box-sizing: border-box; }
-      html, body, #app { height: 100%; }
-      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
 
-      .config-form {
-        max-width: 500px;
-        margin: 80px auto;
-        padding: 32px;
-        border: 1px solid #e9edef;
-        border-radius: 12px;
-        background: #fff;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-      }
-      .config-form h2 {
-        margin-bottom: 4px;
-        color: #111b21;
-      }
-      .config-form p {
-        margin-bottom: 20px;
-        color: #667781;
-        font-size: 14px;
-      }
-      .form-group {
-        margin-bottom: 16px;
-      }
-      .form-group label {
-        display: block;
-        margin-bottom: 4px;
-        font-size: 13px;
-        font-weight: 500;
-        color: #111b21;
-      }
-      .form-group input {
-        width: 100%;
-        padding: 10px 12px;
-        border: 1px solid #d1d7db;
-        border-radius: 8px;
-        font-size: 14px;
-        outline: none;
-        transition: border-color 0.2s;
-      }
-      .form-group input:focus {
-        border-color: #00a884;
-      }
-      .btn {
-        width: 100%;
-        padding: 12px;
-        background: #00a884;
-        color: #fff;
-        border: none;
-        border-radius: 8px;
-        font-size: 15px;
-        font-weight: 500;
-        cursor: pointer;
-        transition: background 0.2s;
-      }
-      .btn:hover {
-        background: #008f72;
-      }
-      .btn-secondary {
-        position: fixed;
-        top: 12px;
-        right: 12px;
-        width: auto;
-        padding: 8px 16px;
-        font-size: 13px;
-        background: #111b21;
-        border-radius: 6px;
-        z-index: 9999;
-      }
-      .btn-secondary:hover {
-        background: #233138;
-      }
-    </style>
-  </head>
-  <body>
-    <div id="app"></div>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WhatsApp Inbox — Vue 3 Example</title>
+  <!-- Load the compiled library CSS -->
+  <link rel="stylesheet" href="../../dist/whatsapp-inbox.css" />
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
 
-    <!-- Vue 3 from CDN -->
-    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
-    <!-- Compiled WhatsApp Inbox library (UMD) -->
-    <script src="../../dist/whatsapp-inbox.umd.js"></script>
+    html,
+    body,
+    #app {
+      height: 100%;
+    }
 
-    <script>
-      const { createApp, ref, onMounted, onBeforeUnmount, nextTick } = Vue;
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
 
-      const App = {
-        setup() {
-          const mounted = ref(false);
-          const inboxRef = ref(null);
-          const inboxContainer = ref(null);
+  </style>
+</head>
 
-          // Form fields
-          const apiUrl = ref(localStorage.getItem('wa_apiUrl') || '');
-          const apiKey = ref(localStorage.getItem('wa_apiKey') || '');
-          const instanceName = ref(localStorage.getItem('wa_instanceName') || '');
-          const label = ref(localStorage.getItem('wa_label') || '');
+<body>
+  <div id="app"></div>
 
-          async function mountInbox() {
-            // Save to localStorage for convenience
-            localStorage.setItem('wa_apiUrl', apiUrl.value);
-            localStorage.setItem('wa_apiKey', apiKey.value);
-            localStorage.setItem('wa_instanceName', instanceName.value);
-            localStorage.setItem('wa_label', label.value);
+  <!-- Vue 3 from CDN -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <!-- Compiled WhatsApp Inbox library (UMD) -->
+  <script src="../../dist/whatsapp-inbox.umd.js"></script>
 
-            mounted.value = true;
+  <script>
+    const { createApp, ref, onMounted, onBeforeUnmount, nextTick } = Vue;
 
-            await nextTick();
 
-            const config = {
-              devices: [
-                {
-                  id: 'device-1',
-                  label: label.value || instanceName.value,
-                  apiUrl: apiUrl.value,
-                  apiKey: apiKey.value,
-                  instanceName: instanceName.value,
-                  providerType: 'evolution',
-                },
-              ],
-              defaultDeviceId: 'device-1',
-            };
+    const App = {
+      setup() {
+        const inboxRef = ref(null);
+        const inboxContainer = ref(null);
 
-            inboxRef.value = WhatsAppInbox.mount(inboxContainer.value, config);
-          }
+        async function mountInbox() {
+          await nextTick();
 
-          function unmountInbox() {
-            if (inboxRef.value) {
-              inboxRef.value.unmount();
-              inboxRef.value = null;
+          const config = {
+            "devices": [
+              {
+                "id": "device-1",
+                "label": "Device 1",
+                "apiUrl": "https://your-evolution-api.com",
+                "apiKey": "your-api-key",
+                "instanceName": "your-instance-1",
+                "readonly": true
+              },
+              {
+                "id": "device-2",
+                "label": "Device 2",
+                "apiUrl": "https://your-evolution-api.com",
+                "apiKey": "your-api-key",
+                "instanceName": "your-instance-2"
+              }
+            ],
+            defaultDeviceId: 'device-1',
+            translations: {
+              // Lista de conversas                               
+              'conversationList.chats': 'Conversas',
+              'conversationList.autoUpdating': 'Atualizando automaticamente',
+              'conversationList.searchPlaceholder': 'Pesquisar ou iniciar nova conversa',
+              'conversationList.noConversationsFound': 'Nenhuma conversa encontrada',
+              'conversationList.noConversationsYet': 'Nenhuma conversa ainda',
+              'conversationList.selectInstance': 'Selecione uma instância para ver as conversas',
+              'conversationList.yesterday': 'Ontem',
+
+              // Visualização de mensagens
+              'messageView.title': 'WhatsApp Inbox',
+              'messageView.emptyStateDescription': 'Envie e receba mensagens. Selecione uma conversa na barra lateral para começar.',
+              'messageView.encryptionNotice': 'As mensagens são protegidas com criptografia de ponta a ponta. Ninguém fora desta conversa, nem mesmo o WhatsApp, pode lê-las ou ouvi-las.',
+              'messageView.messageDeleted': 'Esta mensagem foi apagada',
+              'messageView.downloadFile': 'Baixar arquivo',
+              'messageView.notDelivered': 'Não entregue',
+              'messageView.readOnlyMode': 'Este dispositivo está em modo somente leitura',
+              'messageView.uploadFile': 'Enviar arquivo',
+              'messageView.sendInteractiveMessage': 'Enviar mensagem interativa',
+              'messageView.typeMessage': 'Digite uma mensagem',
+              'messageView.sendTemplate': 'Enviar template',
+              'messageView.noInboundMessages': 'O usuário ainda não enviou mensagem. Envie um template ou aguarde a resposta.',
+              'messageView.outside24HourWindow': 'A última mensagem foi há mais de 24 horas. Envie um template ou aguarde o usuário enviar uma mensagem.',
+              'messageView.today': 'Hoje',
+              'messageView.yesterday': 'Ontem',
+
+              // Seletor de instância
+              'instanceSelector.loadingDevices': 'Carregando dispositivos...',
+              'instanceSelector.noDevicesConfigured': 'Nenhum dispositivo configurado',
+              'instanceSelector.selectDevice': 'Selecionar dispositivo',
+              'instanceSelector.allDevices': 'Todos os Dispositivos',
+              'instanceSelector.connected': 'conectado(s)',
+              'instanceSelector.close': 'Fechar',
+              'instanceSelector.mergeDevices': 'Unificar dispositivos',
+
+              // Menu de contexto
+              'contextMenu.messageOptions': 'Opções da mensagem',
+              'contextMenu.copy': 'Copiar',
+              'contextMenu.forward': 'Encaminhar',
+              'contextMenu.delete': 'Apagar',
+              'contextMenu.deleteMessage': 'Apagar mensagem',
+              'contextMenu.deleteConfirmation': 'Isso apagará a mensagem para todos no chat. Esta ação não pode ser desfeita.',
+              'contextMenu.cancel': 'Cancelar',
+              'contextMenu.deleteForEveryone': 'Apagar para todos',
+
+              // Diálogo de encaminhamento
+              'forwardDialog.title': 'Encaminhar mensagem',
+              'forwardDialog.description': 'Escolha um contato para encaminhar esta mensagem',
+              'forwardDialog.forwarding': 'Encaminhando:',
+              'forwardDialog.searchContacts': 'Pesquisar contatos...',
+              'forwardDialog.noContactsFound': 'Nenhum contato encontrado',
+              'forwardDialog.cancel': 'Cancelar',
+              'forwardDialog.forward': 'Encaminhar',
+
+              // Seletor de template
+              'templateSelector.title': 'Enviar mensagem de template',
+              'templateSelector.description': 'Selecione um template para enviar para {phoneNumber}',
+              'templateSelector.noTemplates': 'Nenhum template aprovado encontrado',
+              'templateSelector.cancel': 'Cancelar',
+              'templateSelector.send': 'Enviar',
+              'templateSelector.notSupported': 'Templates ainda não são suportados para este provedor',
+
+              // Parâmetros de template
+              'templateParameters.title': 'Parâmetros do template',
+              'templateParameters.description': 'Preencha os parâmetros para {templateName}',
+              'templateParameters.fillAllParameters': 'Por favor, preencha todos os parâmetros',
+              'templateParameters.example': 'Exemplo: {example}',
+              'templateParameters.back': 'Voltar',
+              'templateParameters.sendTemplate': 'Enviar template',
+              'templateParameters.notSupported': 'Templates ainda não são suportados para este provedor',
+
+              // Mensagem interativa
+              'interactiveDialog.title': 'Enviar mensagem interativa',
+              'interactiveDialog.description': 'Crie uma mensagem com botões interativos',
+              'interactiveDialog.headerLabel': 'Cabeçalho (opcional)',
+              'interactiveDialog.headerPlaceholder': 'Adicione um cabeçalho à sua mensagem',
+              'interactiveDialog.bodyLabel': 'Corpo',
+              'interactiveDialog.bodyPlaceholder': 'Digite o texto da mensagem',
+              'interactiveDialog.buttonsLabel': 'Botões',
+              'interactiveDialog.addButton': 'Adicionar botão',
+              'interactiveDialog.buttonPlaceholder': 'Título do botão {index}',
+              'interactiveDialog.moreButtons': 'Você pode adicionar mais {count} botão(ões)',
+              'interactiveDialog.cancel': 'Cancelar',
+              'interactiveDialog.send': 'Enviar',
+              'interactiveDialog.validationError': 'Preencha o corpo e todos os títulos dos botões',
+              'interactiveDialog.noConversation': 'Nenhuma conversa selecionada',
+              'interactiveDialog.noInstance': 'Nenhuma instância selecionada',
+
+              // Mídia
+              'mediaMessage.unavailable': 'Mídia indisponível',
+              'mediaMessage.downloadDocument': 'Baixar documento',
             }
-            mounted.value = false;
-          }
-
-          // Auto-mount if we have saved config
-          onMounted(() => {
-            if (apiUrl.value && apiKey.value && instanceName.value) {
-              mountInbox();
-            }
-          });
-
-          onBeforeUnmount(() => {
-            if (inboxRef.value) {
-              inboxRef.value.unmount();
-            }
-          });
-
-          return {
-            mounted,
-            inboxContainer,
-            apiUrl,
-            apiKey,
-            instanceName,
-            label,
-            mountInbox,
-            unmountInbox,
           };
-        },
 
-        template: `
-          <!-- Config form -->
-          <div v-if="!mounted" class="config-form">
-            <h2>WhatsApp Inbox</h2>
-            <p>Connect to your Evolution API instance.</p>
+          inboxRef.value = WhatsAppInbox.mount(inboxContainer.value, config);
+        }
 
-            <div class="form-group">
-              <label>API URL</label>
-              <input v-model="apiUrl" placeholder="https://your-evolution-api.com" />
-            </div>
+        onMounted(() => {
+          mountInbox();
+        });
 
-            <div class="form-group">
-              <label>API Key</label>
-              <input v-model="apiKey" type="password" placeholder="your-api-key" />
-            </div>
+        onBeforeUnmount(() => {
+          if (inboxRef.value) {
+            inboxRef.value.unmount();
+          }
+        });
 
-            <div class="form-group">
-              <label>Instance Name</label>
-              <input v-model="instanceName" placeholder="my-whatsapp" />
-            </div>
+        return {
+          inboxContainer,
+        };
+      },
 
-            <div class="form-group">
-              <label>Label (optional)</label>
-              <input v-model="label" placeholder="My WhatsApp" />
-            </div>
-
-            <button class="btn" @click="mountInbox" :disabled="!apiUrl || !apiKey || !instanceName">
-              Connect
-            </button>
-          </div>
-
-          <!-- Inbox container -->
-          <div v-show="mounted" ref="inboxContainer" style="height: 100%;"></div>
-
-          <!-- Disconnect button -->
-          <button v-if="mounted" class="btn btn-secondary" @click="unmountInbox">
-            Disconnect
-          </button>
+      template: `
+          <div ref="inboxContainer" style="height: 100%;"></div>
         `,
-      };
+    };
 
-      createApp(App).mount('#app');
-    </script>
-  </body>
+    createApp(App).mount('#app');
+  </script>
+</body>
+
 </html>
