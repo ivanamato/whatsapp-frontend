@@ -53,3 +53,6 @@ devices.json
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# justfile (contains push/release commands)
+justfile

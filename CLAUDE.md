@@ -18,8 +18,13 @@ make preview         # Serve built library locally
 make lint            # Run ESLint
 make typecheck       # Run TypeScript type check
 make clean           # Remove dist and node_modules
-make release-minor   # Bump minor version, push, and create GitHub release
-make release-major   # Bump major version, push, and create GitHub release
+```
+
+Release commands live in a gitignored `justfile` (requires [just](https://github.com/casey/just)):
+
+```bash
+just release-minor   # Bump minor version, push, and create GitHub release
+just release-major   # Bump major version, push, and create GitHub release
 ```
 
 ## Architecture
@@ -81,7 +86,7 @@ Vite library mode produces:
 
 Package is published to GitHub Packages as `@ivanamato/whatsapp-inbox`. A GitHub Actions workflow (`.github/workflows/publish.yml`) automatically builds and publishes on every GitHub Release.
 
-- **Release commands:** `make release-minor` or `make release-major` bump the version, push the tag, and create a GitHub release (which triggers the publish workflow).
+- **Release commands:** `just release-minor` or `just release-major` bump the version, push the tag, and create a GitHub release (which triggers the publish workflow). The justfile is gitignored.
 - **Registry config:** `.npmrc` scopes `@ivanamato` to `https://npm.pkg.github.com`.
 - **`publishConfig`** in `package.json` points to GitHub Packages.
 
