@@ -169,8 +169,8 @@ make preview         # Preview the built library
 make lint            # Run ESLint
 make typecheck       # Run TypeScript type check
 make clean           # Remove dist/ and node_modules/
-make release-minor   # Bump minor, push tag, create release → publishes to GitHub Packages
-make release-major   # Bump major, push tag, create release → publishes to GitHub Packages
+just release-minor   # Bump minor, push tag, create release → publishes to GitHub Packages
+just release-major   # Bump major, push tag, create release → publishes to GitHub Packages
 ```
 
 ### Build Output
