@@ -50,7 +50,9 @@ export function TemplateSelectorDialog({ open, onOpenChange, phoneNumber, onTemp
       setError(t('templateSelector.notSupported'));
       setTemplates([]);
     } catch (err) {
-      console.error('Error fetching templates:', err);
+      if (process.env.NODE_ENV !== 'production') {
+        console.error('Error fetching templates:', err instanceof Error ? err.message : String(err));
+      }
       setError(err instanceof Error ? err.message : t('templateSelector.notSupported'));
     } finally {
       setLoading(false);
@@ -79,7 +81,9 @@ export function TemplateSelectorDialog({ open, onOpenChange, phoneNumber, onTemp
       // Templates not yet implemented for direct provider calls
       setError(t('templateSelector.notSupported'));
     } catch (err) {
-      console.error('Error sending template:', err);
+      if (process.env.NODE_ENV !== 'production') {
+        console.error('Error sending template:', err instanceof Error ? err.message : String(err));
+      }
       setError(err instanceof Error ? err.message : t('templateSelector.notSupported'));
     } finally {
       setSending(null);

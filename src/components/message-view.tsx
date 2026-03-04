@@ -16,6 +16,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useProvider } from '@/lib/provider-context';
 import { useTranslations } from '@/lib/i18n';
 import type { WhatsAppProvider } from '@/lib/providers/types';
+import { sanitizeUrl, sanitizeDisplayFilename } from '@/lib/url-utils';
 
 type Message = {
   id: string;
@@ -230,7 +231,9 @@ export function MessageView({ conversationId, phoneNumber, contactName, profileP
       });
       previousMessageCountRef.current = sortedMessages.length;
     } catch (error) {
-      console.error('Error fetching messages:', error);
+      if (process.env.NODE_ENV !== 'production') {
+        console.error('Error fetching messages:', error instanceof Error ? error.message : String(error));
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -289,9 +292,43 @@ export function MessageView({ conversationId, phoneNumber, contactName, profileP
     onPoll: fetchMessages
   });
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    // 16 MB size limit (WhatsApp's actual limit)
+    if (file.size > 16 * 1024 * 1024) {
+      e.target.value = '';
+      return;
+    }
+
+    // Validate MIME type beyond the accept attribute (which is a UI hint only)
+    const allowedPrefixes = ['image/', 'video/', 'audio/'];
+    const allowedTypes = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ];
+    if (
+      !allowedPrefixes.some((p) => file.type.startsWith(p)) &&
+      !allowedTypes.includes(file.type)
+    ) {
+      e.target.value = '';
+      return;
+    }
+
+    // Validate magic bytes to prevent MIME-type spoofing for dangerous file types
+    try {
+      const header = new Uint8Array(await file.slice(0, 4).arrayBuffer());
+      const headerText = new TextDecoder().decode(header);
+      // Block files that start with HTML/XML-like content (potential script execution)
+      if (headerText.startsWith('<') || headerText.startsWith('<!')) {
+        e.target.value = '';
+        return;
+      }
+    } catch {
+      // If we can't read the file header, allow it (fallback to server-side validation)
+    }
 
     setSelectedFile(file);
 
@@ -329,7 +366,7 @@ export function MessageView({ conversationId, phoneNumber, contactName, profileP
           mediaType,
           media: base64,
           caption: messageInput.trim() || undefined,
-          fileName: selectedFile.name,
+          fileName: selectedFile.name.replace(/[\x00-\x1f/\\:*?"<>|]/g, '_').replace(/^\.+/, '_').replace(/[.\s]+$/, '').slice(0, 255) || 'unnamed',
           mimeType: selectedFile.type,
         });
       } else {
@@ -343,7 +380,9 @@ export function MessageView({ conversationId, phoneNumber, contactName, profileP
       handleRemoveFile();
       await fetchMessages();
     } catch (error) {
-      console.error('Error sending message:', error);
+      if (process.env.NODE_ENV !== 'production') {
+        console.error('Error sending message:', error instanceof Error ? error.message : String(error));
+      }
     } finally {
       setSending(false);
     }
@@ -437,7 +476,7 @@ export function MessageView({ conversationId, phoneNumber, contactName, profileP
           </Button>
         )}
         <Avatar className="wa:h-10 wa:w-10 wa:flex-shrink-0 wa:cursor-pointer">
-          {profilePicUrl && <AvatarImage src={profilePicUrl} alt={contactName || phoneNumber} />}
+          {sanitizeUrl(profilePicUrl) && <AvatarImage src={sanitizeUrl(profilePicUrl)!} alt={contactName || phoneNumber} />}
           <AvatarFallback className="wa:bg-[#dfe5e7] wa:text-[#54656f] wa:text-sm wa:font-medium">
             {getAvatarInitials(contactName, phoneNumber)}
           </AvatarFallback>
@@ -538,37 +577,37 @@ export function MessageView({ conversationId, phoneNumber, contactName, profileP
                             <div style={{ margin: '-7px -12px 4px' }} className="wa:overflow-hidden wa:rounded-t-[7.5px]">
                               {message.messageType === 'sticker' ? (
                                 <img
-                                  src={message.mediaData.url}
+                                  src={sanitizeUrl(message.mediaData.url) ?? ''}
                                   alt="Sticker"
                                   style={{ margin: '7px 12px 0' }}
                                   className="wa:max-w-[150px] wa:max-h-[150px] wa:h-auto"
                                 />
                               ) : message.mediaData.contentType?.startsWith('image/') || message.messageType === 'image' ? (
                                 <img
-                                  src={message.mediaData.url}
+                                  src={sanitizeUrl(message.mediaData.url) ?? ''}
                                   alt="Image"
                                   className="wa:w-full wa:h-auto wa:max-h-[330px] wa:object-cover"
                                 />
                               ) : message.mediaData.contentType?.startsWith('video/') || message.messageType === 'video' ? (
                                 <video
-                                  src={message.mediaData.url}
+                                  src={sanitizeUrl(message.mediaData.url) ?? ''}
                                   controls
                                   className="wa:w-full wa:h-auto wa:max-h-[330px]"
                                 />
                               ) : message.mediaData.contentType?.startsWith('audio/') || message.messageType === 'audio' ? (
                                 <div style={{ padding: '7px 12px 0' }}>
-                                  <AudioPlayer src={message.mediaData.url} isOutbound={isOutbound} />
+                                  <AudioPlayer src={sanitizeUrl(message.mediaData.url) ?? ''} isOutbound={isOutbound} />
                                 </div>
                               ) : (
                                 <div style={{ padding: '7px 12px 0' }}>
                                   <a
-                                    href={message.mediaData.url}
+                                    href={sanitizeUrl(message.mediaData.url) ?? '#'}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="wa:flex wa:items-center wa:gap-2 wa:text-[14.2px] wa:underline wa:cursor-pointer hover:wa:opacity-80 wa:text-[#027eb5]"
                                   >
                                     <Paperclip className="wa:h-4 wa:w-4 wa:flex-shrink-0" />
-                                    {message.mediaData.filename || message.filename || t('messageView.downloadFile')}
+                                    {sanitizeDisplayFilename(message.mediaData.filename || message.filename) || t('messageView.downloadFile')}
                                   </a>
                                 </div>
                               )}
@@ -636,7 +675,7 @@ export function MessageView({ conversationId, phoneNumber, contactName, profileP
                       {/* Reaction */}
                       {message.reactionEmoji && (
                         <div className="wa:absolute -wa:bottom-2.5 wa:right-1 wa:bg-white wa:rounded-full wa:px-1 wa:py-0.5 wa:text-[14px] wa:shadow-[0_1px_3px_rgba(11,20,26,0.16)] wa:leading-none wa:select-none">
-                          {message.reactionEmoji}
+                          {message.reactionEmoji.replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF\x00-\x1F]/g, '').slice(0, 8)}
                         </div>
                       )}
                       </div>

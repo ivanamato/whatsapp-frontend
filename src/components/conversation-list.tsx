@@ -9,6 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useProvider, useDeviceContext } from '@/lib/provider-context';
 import { useTranslations } from '@/lib/i18n';
+import { sanitizeUrl } from '@/lib/url-utils';
 
 type Conversation = {
   id: string;
@@ -141,7 +142,9 @@ export const ConversationList = forwardRef<ConversationListRef, Props>(
       const mapped = await doFetch();
       setConversations(mapped);
     } catch (error) {
-      console.error('Error fetching conversations:', error);
+      if (process.env.NODE_ENV !== 'production') {
+        console.error('Error fetching conversations:', error instanceof Error ? error.message : String(error));
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -325,8 +328,8 @@ export const ConversationList = forwardRef<ConversationListRef, Props>(
 
               <div className="wa:flex wa:gap-3.5 wa:items-center wa:w-full wa:py-3.5 wa:overflow-hidden">
                 <Avatar className="wa:h-[49px] wa:w-[49px] wa:flex-shrink-0">
-                  {conversation.profilePicUrl && (
-                    <AvatarImage src={conversation.profilePicUrl} alt={conversation.contactName || conversation.phoneNumber} />
+                  {sanitizeUrl(conversation.profilePicUrl) && (
+                    <AvatarImage src={sanitizeUrl(conversation.profilePicUrl)!} alt={conversation.contactName || conversation.phoneNumber} />
                   )}
                   <AvatarFallback className="wa:bg-[#dfe5e7] wa:text-[#54656f] wa:text-sm wa:font-medium">
                     {getAvatarInitials(conversation.contactName, conversation.phoneNumber)}

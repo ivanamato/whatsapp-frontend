@@ -54,6 +54,7 @@ export type Translations = {
   'forwardDialog.noContactsFound': string;
   'forwardDialog.cancel': string;
   'forwardDialog.forward': string;
+  'forwardDialog.genericError': string;
 
   // Template selector dialog
   'templateSelector.title': string;
@@ -88,6 +89,7 @@ export type Translations = {
   'interactiveDialog.validationError': string;
   'interactiveDialog.noConversation': string;
   'interactiveDialog.noInstance': string;
+  'interactiveDialog.sendError': string;
 
   // Media message
   'mediaMessage.unavailable': string;
@@ -148,6 +150,7 @@ export const defaultTranslations: Translations = {
   'forwardDialog.noContactsFound': 'No contacts found',
   'forwardDialog.cancel': 'Cancel',
   'forwardDialog.forward': 'Forward',
+  'forwardDialog.genericError': 'Failed to forward message',
 
   // Template selector dialog
   'templateSelector.title': 'Send template message',
@@ -182,6 +185,7 @@ export const defaultTranslations: Translations = {
   'interactiveDialog.validationError': 'Please fill in the body and all button titles',
   'interactiveDialog.noConversation': 'No conversation selected',
   'interactiveDialog.noInstance': 'No instance selected',
+  'interactiveDialog.sendError': 'Failed to send message',
 
   // Media message
   'mediaMessage.unavailable': 'Media unavailable',

@@ -82,7 +82,9 @@ export function MessageContextMenu({
       setShowDeleteConfirm(false);
       onDeleted(message.id);
     } catch (error) {
-      console.error('Error deleting message:', error);
+      if (process.env.NODE_ENV !== 'production') {
+        console.error('Error deleting message:', error instanceof Error ? error.message : String(error));
+      }
     } finally {
       setDeleting(false);
     }

@@ -68,7 +68,9 @@ export function TemplateParametersDialog({
       void template;
       setError(t('templateParameters.notSupported'));
     } catch (err) {
-      console.error('Error sending template:', err);
+      if (process.env.NODE_ENV !== 'production') {
+        console.error('Error sending template:', err instanceof Error ? err.message : String(err));
+      }
       setError(err instanceof Error ? err.message : t('templateParameters.notSupported'));
     } finally {
       setSending(false);

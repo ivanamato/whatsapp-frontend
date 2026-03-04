@@ -10,30 +10,52 @@ export function useAutoPolling({ interval = 5000, enabled = true, onPoll }: UseA
   const [isPolling, setIsPolling] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const isRunningRef = useRef(false);
+  const consecutiveErrorsRef = useRef(0);
+  const MAX_BACKOFF_MS = 60000;
 
   const startPolling = useCallback(() => {
     if (!enabled) return;
 
     setIsPolling(true);
+    consecutiveErrorsRef.current = 0;
 
     const poll = async () => {
+      if (isRunningRef.current) return;
+      isRunningRef.current = true;
       try {
         await onPoll();
+        consecutiveErrorsRef.current = 0;
       } catch (error) {
-        console.error('Polling error:', error);
+        consecutiveErrorsRef.current++;
+        if (process.env.NODE_ENV !== 'production') {
+          console.error('Polling error:', error instanceof Error ? error.message : String(error));
+        }
+      } finally {
+        isRunningRef.current = false;
       }
     };
 
-    // Poll immediately
-    poll();
+    const scheduleNext = () => {
+      const backoff = Math.min(
+        interval * Math.pow(2, consecutiveErrorsRef.current),
+        MAX_BACKOFF_MS,
+      );
+      intervalRef.current = setTimeout(async () => {
+        await poll();
+        if (intervalRef.current !== null) {
+          scheduleNext();
+        }
+      }, backoff);
+    };
 
-    // Then poll at intervals
-    intervalRef.current = setInterval(poll, interval);
+    // Poll immediately, then schedule with backoff
+    poll().then(() => scheduleNext());
   }, [interval, enabled, onPoll]);
 
   const stopPolling = useCallback(() => {
     if (intervalRef.current) {
-      clearInterval(intervalRef.current);
+      clearTimeout(intervalRef.current);
       intervalRef.current = null;
     }
     setIsPolling(false);

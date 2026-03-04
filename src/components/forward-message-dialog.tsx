@@ -79,7 +79,9 @@ export function ForwardMessageDialog({
           );
         })
         .catch((err) => {
-          console.error('Error fetching conversations:', err);
+          if (process.env.NODE_ENV !== 'production') {
+            console.error('Error fetching conversations:', err instanceof Error ? err.message : String(err));
+          }
         })
         .finally(() => {
           setLoadingConversations(false);
@@ -131,8 +133,10 @@ export function ForwardMessageDialog({
       onOpenChange(false);
       onForwarded?.();
     } catch (err) {
-      console.error('Error forwarding message:', err);
-      setError(err instanceof Error ? err.message : 'Failed to forward message');
+      if (process.env.NODE_ENV !== 'production') {
+        console.error('Error forwarding message:', err instanceof Error ? err.message : String(err));
+      }
+      setError(t('forwardDialog.genericError') || 'Failed to forward message');
     } finally {
       setSending(false);
     }

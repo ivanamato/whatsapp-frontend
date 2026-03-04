@@ -3,7 +3,7 @@ import { EvolutionProvider } from './providers/evolution';
 import type { WhatsAppProvider, ProviderType, DeviceConfig, WhatsAppMultiDeviceConfig, ViewMode } from './providers/types';
 import { TranslationsProvider } from './i18n';
 
-// --- Provider registry: one provider per unique (apiUrl, instanceToken, providerType) ---
+// --- Provider registry: one provider per unique device (keyed by device.id to avoid token exposure) ---
 
 function createProviderInstance(type: ProviderType, apiUrl: string, instanceToken: string): WhatsAppProvider {
   if (type === 'evolution') {
@@ -16,7 +16,7 @@ function buildProviderRegistry(devices: DeviceConfig[]): Map<string, WhatsAppPro
   const registry = new Map<string, WhatsAppProvider>();
   for (const device of devices) {
     const type = device.providerType || 'evolution';
-    const key = `${device.apiUrl}|${device.instanceToken}|${type}`;
+    const key = `${device.id}|${type}`;
     if (!registry.has(key)) {
       registry.set(key, createProviderInstance(type, device.apiUrl, device.instanceToken));
     }
@@ -26,7 +26,7 @@ function buildProviderRegistry(devices: DeviceConfig[]): Map<string, WhatsAppPro
 
 function getProviderForDevice(device: DeviceConfig, registry: Map<string, WhatsAppProvider>): WhatsAppProvider {
   const type = device.providerType || 'evolution';
-  const key = `${device.apiUrl}|${device.instanceToken}|${type}`;
+  const key = `${device.id}|${type}`;
   return registry.get(key)!;
 }
 

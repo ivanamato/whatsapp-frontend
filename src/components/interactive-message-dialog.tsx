@@ -118,8 +118,10 @@ export function InteractiveMessageDialog({
       onOpenChange(false);
       onMessageSent?.();
     } catch (err) {
-      console.error('Error sending interactive message:', err);
-      setError(err instanceof Error ? err.message : t('interactiveDialog.validationError'));
+      if (process.env.NODE_ENV !== 'production') {
+        console.error('Error sending interactive message:', err instanceof Error ? err.message : String(err));
+      }
+      setError(t('interactiveDialog.sendError') || 'Failed to send message');
     } finally {
       setSending(false);
     }

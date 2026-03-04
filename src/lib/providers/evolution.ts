@@ -447,7 +447,28 @@ export class EvolutionProvider implements WhatsAppProvider {
   constructor(
     private readonly baseUrl: string,
     private readonly instanceToken: string
-  ) {}
+  ) {
+    // Validate API URL protocol
+    try {
+      const parsed = new URL(baseUrl);
+      if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+        throw new Error(`Unsupported API URL protocol: ${parsed.protocol}`);
+      }
+      if (parsed.protocol === 'http:') {
+        if (process.env.NODE_ENV === 'production') {
+          throw new Error(
+            'API URL must use HTTPS in production. Sending instance tokens over HTTP exposes them to network interception.',
+          );
+        }
+        console.warn(
+          '[WhatsApp Inbox] API URL uses HTTP — instance tokens will be sent in cleartext. Use HTTPS in production.',
+        );
+      }
+    } catch (e) {
+      if (e instanceof Error && (e.message.startsWith('Unsupported') || e.message.startsWith('API URL must'))) throw e;
+      throw new Error(`Invalid API URL: ${baseUrl}`);
+    }
+  }
 
   private async request<T>(path: string, options?: RequestInit): Promise<T> {
     const url = `${this.baseUrl}${path}`;
@@ -462,7 +483,16 @@ export class EvolutionProvider implements WhatsAppProvider {
 
     if (!res.ok) {
       const body = await res.text().catch(() => '');
-      throw new Error(`Evolution API ${res.status}: ${body}`);
+      if (process.env.NODE_ENV !== 'production') {
+        console.error(`Evolution API error ${res.status}:`, body.slice(0, 500));
+      }
+      throw new Error(`Request failed (${res.status})`);
+    }
+
+    // Guard against oversized responses (10 MB limit)
+    const contentLength = res.headers.get('content-length');
+    if (contentLength && parseInt(contentLength, 10) > 10 * 1024 * 1024) {
+      throw new Error('Response too large');
     }
 
     return res.json() as Promise<T>;
@@ -799,6 +829,11 @@ export class EvolutionProvider implements WhatsAppProvider {
       );
 
       if (data.base64 && data.mimetype) {
+        // Validate MIME type before constructing data URI to prevent script execution
+        const SAFE_MEDIA_MIMES = /^(image\/(?:jpeg|png|gif|webp|bmp|tiff)|video|audio|application\/(pdf|octet-stream))\//i;
+        if (!SAFE_MEDIA_MIMES.test(data.mimetype)) {
+          return null;
+        }
         return `data:${data.mimetype};base64,${data.base64}`;
       }
       return null;

@@ -12,6 +12,14 @@ function serveDevicesJson(): Plugin {
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
         if (req.url !== '/devices.json') return next();
+        // Only serve tokens to loopback connections (check actual remote IP, not spoofable Host header)
+        const remoteAddr = req.socket.remoteAddress || '';
+        const isLoopback = remoteAddr === '127.0.0.1' || remoteAddr === '::1' || remoteAddr === '::ffff:127.0.0.1';
+        if (!isLoopback) {
+          res.statusCode = 403;
+          res.end('Forbidden: devices.json is only served to localhost');
+          return;
+        }
         const filePath = resolve(__dirname, 'devices.json');
         if (!existsSync(filePath)) return next();
         res.setHeader('Content-Type', 'application/json');
@@ -21,7 +29,7 @@ function serveDevicesJson(): Plugin {
   };
 }
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   envPrefix: 'OPENWHATS_',
   plugins: [
     preact(),
@@ -39,7 +47,9 @@ export default defineConfig({
     },
   },
   define: {
-    'process.env.NODE_ENV': JSON.stringify('production'),
+    'process.env.NODE_ENV': JSON.stringify(
+      command === 'build' ? 'production' : 'development'
+    ),
   },
   build: {
     lib: {
@@ -58,4 +68,4 @@ export default defineConfig({
     },
     cssCodeSplit: false,
   },
-});
+}));

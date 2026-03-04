@@ -5,6 +5,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { AudioPlayer } from '@/components/audio-player';
 import { useProvider } from '@/lib/provider-context';
 import { useTranslations } from '@/lib/i18n';
+import { sanitizeUrl, sanitizeDisplayFilename } from '@/lib/url-utils';
 
 type Props = {
   mediaId: string;
@@ -80,7 +81,7 @@ export function MediaMessage({ mediaId, messageType, caption, filename, isOutbou
     <div>
       {messageType === 'image' && (
         <img
-          src={mediaUrl}
+          src={sanitizeUrl(mediaUrl) ?? ''}
           alt={caption || 'Image'}
           className="wa:rounded wa:max-w-full wa:h-auto wa:max-h-96"
           onError={handleLoadError}
@@ -89,7 +90,7 @@ export function MediaMessage({ mediaId, messageType, caption, filename, isOutbou
 
       {messageType === 'video' && (
         <video
-          src={mediaUrl}
+          src={sanitizeUrl(mediaUrl) ?? ''}
           controls
           className="wa:rounded wa:max-w-full wa:h-auto wa:max-h-96"
           onError={handleLoadError}
@@ -97,18 +98,18 @@ export function MediaMessage({ mediaId, messageType, caption, filename, isOutbou
       )}
 
       {messageType === 'audio' && (
-        <AudioPlayer src={mediaUrl} isOutbound={isOutbound} onError={handleLoadError} />
+        <AudioPlayer src={sanitizeUrl(mediaUrl) ?? ''} isOutbound={isOutbound} onError={handleLoadError} />
       )}
 
       {messageType === 'document' && (
         <a
-          href={mediaUrl}
+          href={sanitizeUrl(mediaUrl) ?? '#'}
           target="_blank"
           rel="noopener noreferrer"
           className="wa:flex wa:items-center wa:gap-2 wa:text-sm wa:underline wa:cursor-pointer hover:wa:opacity-80 wa:transition-opacity wa:text-[#00a884]"
         >
           <FileText className="wa:h-4 wa:w-4" />
-          {filename || t('mediaMessage.downloadDocument')}
+          {sanitizeDisplayFilename(filename) || t('mediaMessage.downloadDocument')}
         </a>
       )}
     </div>
