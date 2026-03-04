@@ -1,6 +1,6 @@
 {
   "name": "@ivanamato/whatsapp-inbox",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "type": "module",
   "main": "./dist/whatsapp-inbox.umd.js",
   "module": "./dist/whatsapp-inbox.es.js",
