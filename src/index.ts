@@ -1,10 +1,10 @@
 import { createRoot, type Root } from 'react-dom/client';
-import { createElement } from 'react';
+import { createElement, createRef } from 'react';
 import { ProviderProvider } from './lib/provider-context';
-import { App } from './App';
+import { ImperativeApiBridge, type ImperativeApi } from './imperative-bridge';
 import './app/globals.css';
 
-export type { WhatsAppProvider, ProviderType, Chat, Message, SendTextParams, SendMediaParams, SendButtonsParams, SendResult, DeviceConfig, WhatsAppMultiDeviceConfig } from './lib/providers/types';
+export type { WhatsAppProvider, ProviderType, Chat, Message, SendTextParams, SendMediaParams, SendButtonsParams, SendResult, DeviceConfig, WhatsAppMultiDeviceConfig, ChatAction } from './lib/providers/types';
 export type { Translations } from './lib/i18n';
 export { defaultTranslations, useTranslations, TranslationsProvider } from './lib/i18n';
 export { EvolutionProvider } from './lib/providers/evolution';
@@ -15,9 +15,16 @@ export { MessageView } from './components/message-view';
 export { InstanceSelector } from './components/instance-selector';
 export { App } from './App';
 
-import type { WhatsAppMultiDeviceConfig } from './lib/providers/types';
+import type { WhatsAppMultiDeviceConfig, Chat, Message, SendResult, SendTextParams } from './lib/providers/types';
 
-type WhatsAppInbox = {
+export type WhatsAppInbox = {
+  getChats: () => Promise<Chat[]>;
+  getMessages: (chatId: string, limit?: number) => Promise<Message[]>;
+  sendText: (params: SendTextParams) => Promise<SendResult>;
+  getConnectionState: () => Promise<'open' | 'close' | 'connecting'>;
+  getActiveDevice: () => string | null;
+  setActiveDevice: (deviceId: string) => void;
+  selectConversation: (phoneNumber: string) => void;
   unmount: () => void;
 };
 
@@ -33,13 +40,29 @@ export function mount(element: HTMLElement, config: WhatsAppMultiDeviceConfig): 
   const root = createRoot(element);
   roots.set(element, root);
 
+  const bridgeRef = createRef<ImperativeApi>();
+
   root.render(
     createElement(ProviderProvider, { config },
-      createElement(App)
+      createElement(ImperativeApiBridge, { ref: bridgeRef, chatActions: config.chatActions })
     )
   );
 
+  function getBridge(): ImperativeApi {
+    if (!bridgeRef.current) {
+      throw new Error('WhatsApp Inbox is not mounted yet');
+    }
+    return bridgeRef.current;
+  }
+
   return {
+    getChats: () => getBridge().getChats(),
+    getMessages: (chatId, limit?) => getBridge().getMessages(chatId, limit),
+    sendText: (params) => getBridge().sendText(params),
+    getConnectionState: () => getBridge().getConnectionState(),
+    getActiveDevice: () => getBridge().getActiveDevice(),
+    setActiveDevice: (deviceId) => getBridge().setActiveDevice(deviceId),
+    selectConversation: (phoneNumber) => getBridge().selectConversation(phoneNumber),
     unmount: () => {
       root.unmount();
       roots.delete(element);

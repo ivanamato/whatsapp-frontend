@@ -95,7 +95,7 @@ export function MessageContextMenu({
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button
-            className="wa:absolute wa:top-1 wa:right-1 wa:z-10 wa:opacity-0 group-hover:wa:opacity-100 wa:transition-opacity wa:rounded-full wa:p-0.5 hover:wa:bg-black/5"
+            className="wa-hover-action wa:absolute wa:top-1 wa:right-1 wa:z-10 wa:opacity-0 wa:transition-opacity wa:rounded-full wa:p-0.5 hover:wa:bg-black/5"
             aria-label={t('contextMenu.messageOptions')}
           >
             <ChevronDown className="wa:h-4 wa:w-4 wa:text-[#667781]" />

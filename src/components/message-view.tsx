@@ -530,7 +530,7 @@ export function MessageView({ conversationId, phoneNumber, contactName, profileP
                   <div
                     style={showTail ? { marginBottom: 6, marginTop: 6 } : { marginBottom: 6 }}
                     className={cn(
-                      'wa:flex wa:group',
+                      'wa:flex wa-msg-bubble',
                       isOutbound ? 'wa:justify-end' : 'wa:justify-start',
                     )}
                   >

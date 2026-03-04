@@ -1,0 +1,201 @@
+import { useEffect } from 'react';
+import { MoreVertical, X } from 'lucide-react';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { sanitizeUrl } from '@/lib/url-utils';
+import type { ChatAction, Chat, DeviceConfig } from '@/lib/providers/types';
+
+export type Conversation = {
+  id: string;
+  phoneNumber: string;
+  contactName?: string;
+  profilePicUrl?: string;
+  lastActiveAt?: string;
+  lastMessage?: {
+    content: string;
+    direction: string;
+    type?: string;
+  };
+  unreadCount?: number;
+  deviceId?: string;
+  deviceLabel?: string;
+};
+
+function toChat(conversation: Conversation): Chat {
+  return {
+    id: conversation.id,
+    phoneNumber: conversation.phoneNumber,
+    contactName: conversation.contactName,
+    profilePicUrl: conversation.profilePicUrl,
+    lastActiveAt: conversation.lastActiveAt,
+    lastMessage: conversation.lastMessage as Chat['lastMessage'],
+    unreadCount: conversation.unreadCount,
+  };
+}
+
+function getInitials(contactName?: string, phoneNumber?: string): string {
+  if (contactName) {
+    const words = contactName.trim().split(/\s+/);
+    if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
+    return contactName.slice(0, 2).toUpperCase();
+  }
+  if (phoneNumber) return phoneNumber.replace(/\D/g, '').slice(-2);
+  return '??';
+}
+
+export function ChatActionsTrigger({ onOpen }: { onOpen: () => void }) {
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={(e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        onOpen();
+      }}
+      onMouseDown={(e) => e.stopPropagation()}
+      style={{ flexShrink: 0, marginLeft: 12, padding: 6, borderRadius: '50%', background: '#f0f2f5', cursor: 'pointer' }}
+    >
+      <MoreVertical className="wa:h-5 wa:w-5 wa:text-[#54656f]" />
+    </div>
+  );
+}
+
+export function ChatActionsDialog({
+  open,
+  onClose,
+  actions,
+  conversation,
+  device,
+}: {
+  open: boolean;
+  onClose: () => void;
+  actions: ChatAction[];
+  conversation: Conversation;
+  device: DeviceConfig;
+}) {
+  useEffect(() => {
+    if (!open) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 9999,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      {/* Backdrop */}
+      <div
+        onClick={onClose}
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background: 'rgba(0,0,0,0.5)',
+        }}
+      />
+
+      {/* Panel */}
+      <div
+        style={{
+          position: 'relative',
+          background: 'white',
+          borderRadius: 12,
+          padding: 24,
+          width: '100%',
+          maxWidth: 380,
+          margin: '0 16px',
+          boxShadow: '0 8px 30px rgba(0,0,0,0.12)',
+        }}
+      >
+        {/* Close button */}
+        <button
+          onClick={onClose}
+          style={{
+            position: 'absolute',
+            top: 12,
+            right: 12,
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+            padding: 4,
+            borderRadius: 4,
+            color: '#667781',
+          }}
+        >
+          <X className="wa:h-5 wa:w-5" />
+        </button>
+
+        {/* Header: avatar + name + device */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
+          <Avatar className="wa:h-14 wa:w-14">
+            {sanitizeUrl(conversation.profilePicUrl) && (
+              <AvatarImage
+                src={sanitizeUrl(conversation.profilePicUrl)!}
+                alt={conversation.contactName || conversation.phoneNumber}
+              />
+            )}
+            <AvatarFallback className="wa:bg-[#dfe5e7] wa:text-[#54656f] wa:text-lg wa:font-medium">
+              {getInitials(conversation.contactName, conversation.phoneNumber)}
+            </AvatarFallback>
+          </Avatar>
+          <div>
+            <div style={{ fontSize: 17, fontWeight: 600, color: '#111b21', lineHeight: '22px' }}>
+              {conversation.contactName || conversation.phoneNumber}
+            </div>
+            {conversation.contactName && (
+              <div style={{ fontSize: 13, color: '#667781', lineHeight: '18px' }}>
+                {conversation.phoneNumber}
+              </div>
+            )}
+            <div style={{ fontSize: 13, color: '#667781', lineHeight: '18px' }}>
+              {device.label || device.instanceName}
+            </div>
+          </div>
+        </div>
+
+        {/* Action buttons */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {actions.map((action) => (
+            <button
+              key={action.id}
+              onClick={() => {
+                action.onClick(toChat(conversation), device);
+                onClose();
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                width: '100%',
+                padding: '10px 16px',
+                border: '1px solid #e9edef',
+                borderRadius: 8,
+                background: 'white',
+                cursor: 'pointer',
+                fontSize: 14,
+                color: '#111b21',
+                textAlign: 'left',
+              }}
+              onMouseOver={(e) => { (e.currentTarget as HTMLButtonElement).style.background = '#f0f2f5'; }}
+              onMouseOut={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'white'; }}
+            >
+              {action.icon && <action.icon className="wa:h-5 wa:w-5 wa:text-[#54656f]" />}
+              {action.label}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}

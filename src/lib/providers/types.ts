@@ -15,10 +15,18 @@ export type DeviceConfig = {
   readonly?: boolean;
 };
 
+export type ChatAction = {
+  id: string;
+  label: string;
+  icon?: import('react').ComponentType<{ className?: string }>;
+  onClick: (chat: Chat, device: DeviceConfig) => void;
+};
+
 export type WhatsAppMultiDeviceConfig = {
   devices: DeviceConfig[];
   defaultDeviceId?: string;
   translations?: Partial<import('../i18n').Translations>;
+  chatActions?: ChatAction[];
 };
 
 export type Chat = {

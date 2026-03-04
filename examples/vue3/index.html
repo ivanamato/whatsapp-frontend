@@ -24,6 +24,35 @@
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     }
 
+    .demo-toolbar {
+      display: flex;
+      gap: 8px;
+      padding: 8px 12px;
+      background: #f0f2f5;
+      border-bottom: 1px solid #e9edef;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .demo-toolbar button {
+      padding: 6px 12px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      background: white;
+      cursor: pointer;
+      font-size: 13px;
+    }
+
+    .demo-toolbar button:hover {
+      background: #e9edef;
+    }
+
+    .demo-toolbar .label {
+      font-size: 12px;
+      color: #667781;
+      font-weight: 600;
+    }
+
   </style>
 </head>
 
@@ -51,18 +80,18 @@
             "devices": [
               {
                 "id": "device-1",
-                "label": "Device 1",
+                "label": "My WhatsApp",
                 "apiUrl": "https://your-evolution-api.com",
-                "instanceToken": "your-api-key",
-                "instanceName": "your-instance-1",
+                "instanceToken": "your-instance-token-1",
+                "instanceName": "my-instance-1",
                 "readonly": true
               },
               {
                 "id": "device-2",
-                "label": "Device 2",
+                "label": "Support",
                 "apiUrl": "https://your-evolution-api.com",
-                "instanceToken": "your-api-key",
-                "instanceName": "your-instance-2"
+                "instanceToken": "your-instance-token-2",
+                "instanceName": "my-instance-2"
               }
             ],
             defaultDeviceId: 'device-1',
@@ -161,7 +190,60 @@
             }
           };
 
+          // --- Chat Actions: custom buttons in the chat row dropdown ---
+          config.chatActions = [
+            {
+              id: 'open-crm',
+              label: 'Open in CRM',
+              onClick: (chat, device) => {
+                alert('Open CRM for ' + (chat.contactName || chat.phoneNumber) + ' (device: ' + device.id + ')');
+              }
+            },
+            {
+              id: 'tag-customer',
+              label: 'Tag Customer',
+              onClick: (chat, device) => {
+                alert('Tag ' + (chat.contactName || chat.phoneNumber) + ' on device ' + device.id);
+              }
+            }
+          ];
+
           inboxRef.value = WhatsAppInbox.mount(inboxContainer.value, config);
+        }
+
+        // --- Imperative API demo functions ---
+        async function fetchChats() {
+          if (!inboxRef.value) return;
+          try {
+            const chats = await inboxRef.value.getChats();
+            alert('Found ' + chats.length + ' chats.\n\nFirst 3:\n' + chats.slice(0, 3).map(c => (c.contactName || c.phoneNumber)).join('\n'));
+          } catch (e) {
+            alert('Error: ' + e.message);
+          }
+        }
+
+        async function checkConnection() {
+          if (!inboxRef.value) return;
+          try {
+            const state = await inboxRef.value.getConnectionState();
+            alert('Connection state: ' + state);
+          } catch (e) {
+            alert('Error: ' + e.message);
+          }
+        }
+
+        function showActiveDevice() {
+          if (!inboxRef.value) return;
+          const deviceId = inboxRef.value.getActiveDevice();
+          alert('Active device: ' + (deviceId || 'none'));
+        }
+
+        function switchDevice() {
+          if (!inboxRef.value) return;
+          const current = inboxRef.value.getActiveDevice();
+          const target = current === 'device-1' ? 'device-2' : 'device-1';
+          inboxRef.value.setActiveDevice(target);
+          alert('Switched to ' + target);
         }
 
         onMounted(() => {
@@ -176,11 +258,24 @@
 
         return {
           inboxContainer,
+          fetchChats,
+          checkConnection,
+          showActiveDevice,
+          switchDevice,
         };
       },
 
       template: `
-          <div ref="inboxContainer" style="height: 100%;"></div>
+          <div style="height: 100%; display: flex; flex-direction: column;">
+            <div class="demo-toolbar">
+              <span class="label">Imperative API:</span>
+              <button @click="fetchChats">Get Chats</button>
+              <button @click="checkConnection">Connection State</button>
+              <button @click="showActiveDevice">Active Device</button>
+              <button @click="switchDevice">Switch Device</button>
+            </div>
+            <div ref="inboxContainer" style="flex: 1; min-height: 0;"></div>
+          </div>
         `,
     };
 

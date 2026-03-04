@@ -1,8 +1,9 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, type RefObject } from 'react';
 import { ConversationList, type ConversationListRef } from '@/components/conversation-list';
 import { MessageView } from '@/components/message-view';
 import { InstanceSelector } from '@/components/instance-selector';
 import { useDeviceContext } from '@/lib/provider-context';
+import type { ChatAction } from '@/lib/providers/types';
 
 type Conversation = {
   id: string;
@@ -13,10 +14,16 @@ type Conversation = {
   deviceLabel?: string;
 };
 
-export function App() {
+type AppProps = {
+  conversationListRef?: RefObject<ConversationListRef | null>;
+  chatActions?: ChatAction[];
+};
+
+export function App({ conversationListRef: externalRef, chatActions }: AppProps = {}) {
   const { selectedDevice, readonly: isReadonly, viewMode, devices, getProviderForDevice } = useDeviceContext();
   const [selectedConversation, setSelectedConversation] = useState<Conversation>();
-  const conversationListRef = useRef<ConversationListRef>(null);
+  const internalRef = useRef<ConversationListRef>(null);
+  const conversationListRef = externalRef || internalRef;
 
   // Clear conversation when device changes
   const prevDeviceIdRef = useRef(selectedDevice?.id);
@@ -102,6 +109,7 @@ export function App() {
           isHidden={!!selectedConversation}
           instance={selectedDevice?.instanceName}
           provider={provider}
+          chatActions={chatActions}
         />
         <MessageView
           conversationId={selectedConversation?.id}

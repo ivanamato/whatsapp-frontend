@@ -8,6 +8,8 @@ Built with [Preact](https://preactjs.com/) + [Tailwind CSS v4](https://tailwindc
 
 - **Real-time messaging** — Auto-polling keeps conversations and messages updated
 - **Multi-device** — Switch between multiple WhatsApp instances via a device selector
+- **Imperative API** — Programmatic access to chats, messages, devices, and sending from outside React
+- **Custom chat actions** — Configurable action buttons per chat row driven by the host app
 - **Template messages** — Send WhatsApp-approved templates with header, body, and button parameters
 - **Interactive messages** — Button messages with up to 3 custom actions
 - **Media support** — Send and receive images, videos, audio, and documents
@@ -49,6 +51,10 @@ npm install @ivanamato/whatsapp-inbox
     defaultDeviceId: 'main',
   });
 
+  // Use the imperative API
+  const chats = await inbox.getChats();
+  await inbox.sendText({ to: '5511999999999@s.whatsapp.net', body: 'Hello!' });
+
   // Later: inbox.unmount();
 </script>
 ```
@@ -71,6 +77,10 @@ const inbox = mount(document.getElementById('inbox'), {
   ],
 });
 
+// Use the imperative API
+const chats = await inbox.getChats();
+const messages = await inbox.getMessages(chats[0].id);
+
 // Later: inbox.unmount();
 ```
 
@@ -92,6 +102,8 @@ type DeviceConfig = {
 type WhatsAppMultiDeviceConfig = {
   devices: DeviceConfig[];
   defaultDeviceId?: string;
+  translations?: Partial<Translations>;
+  chatActions?: ChatAction[];
 };
 ```
 
@@ -106,6 +118,196 @@ type WhatsAppMultiDeviceConfig = {
 | `devices[].providerType` | No | `'evolution'` (default) or `'cloud'` |
 | `devices[].readonly` | No | If `true`, disables sending messages |
 | `defaultDeviceId` | No | ID of the device to select on mount |
+| `translations` | No | Override UI strings (see [Translations](#translations)) |
+| `chatActions` | No | Custom action buttons per chat row (see [Custom Chat Actions](#custom-chat-actions)) |
+
+## Imperative API
+
+The `mount()` function returns a `WhatsAppInbox` object with methods to programmatically control the inbox from outside the React tree. This enables host applications to integrate the inbox with their own UI, CRM systems, or automation workflows.
+
+```ts
+const inbox = mount(element, config);
+```
+
+### Methods
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `getChats()` | `Promise<Chat[]>` | Fetch all chats for the active device |
+| `getMessages(chatId, limit?)` | `Promise<Message[]>` | Fetch messages for a specific chat |
+| `sendText({ to, body })` | `Promise<SendResult>` | Send a text message from the active device |
+| `getConnectionState()` | `Promise<'open' \| 'close' \| 'connecting'>` | Check the active device's connection state |
+| `getActiveDevice()` | `string \| null` | Get the currently selected device ID (synchronous) |
+| `setActiveDevice(deviceId)` | `void` | Switch the active device (synchronous) |
+| `selectConversation(phoneNumber)` | `void` | Select a conversation by phone number (synchronous) |
+| `unmount()` | `void` | Unmount the inbox and clean up |
+
+### Example: Fetching chats and sending a message
+
+```js
+const inbox = mount(element, config);
+
+// Wait for the UI to load, then fetch chats
+const chats = await inbox.getChats();
+console.log(`Found ${chats.length} conversations`);
+
+// Send a message to the first chat
+if (chats.length > 0) {
+  const result = await inbox.sendText({
+    to: chats[0].id,
+    body: 'Hello from the imperative API!',
+  });
+  console.log('Sent message:', result.messageId);
+}
+```
+
+### Example: Switching devices and checking connection
+
+```js
+// Check which device is active
+console.log('Active device:', inbox.getActiveDevice());
+
+// Switch to another device
+inbox.setActiveDevice('device-2');
+
+// Check if the new device is connected
+const state = await inbox.getConnectionState();
+if (state === 'open') {
+  console.log('Device is connected');
+}
+```
+
+### Example: Navigating to a conversation
+
+```js
+// Select a conversation by phone number — scrolls to and highlights it
+inbox.selectConversation('5511999999999');
+```
+
+### Types
+
+```ts
+type Chat = {
+  id: string;
+  phoneNumber: string;
+  contactName?: string;
+  profilePicUrl?: string;
+  lastActiveAt?: string;
+  lastMessage?: {
+    content: string;
+    direction: 'inbound' | 'outbound';
+    type?: string;
+  };
+  unreadCount?: number;
+};
+
+type Message = {
+  id: string;
+  direction: 'inbound' | 'outbound';
+  content: string;
+  createdAt: string;
+  status?: string;
+  phoneNumber: string;
+  hasMedia: boolean;
+  mediaData?: {
+    url: string;
+    contentType?: string;
+    filename?: string;
+    byteSize?: number;
+  };
+  messageType: string;
+  caption?: string | null;
+  filename?: string | null;
+  mimeType?: string | null;
+  metadata?: Record<string, unknown>;
+};
+
+type SendTextParams = { to: string; body: string };
+type SendResult = { messageId: string; status?: string };
+```
+
+## Custom Chat Actions
+
+Chat actions add configurable buttons to each conversation row. When a user clicks the three-dot icon on a chat row, a dialog opens showing the contact's profile picture, name, phone number, device name, and your custom action buttons.
+
+This is useful for integrating the inbox with external systems like CRMs, tagging tools, or custom workflows.
+
+### Configuration
+
+Pass a `chatActions` array in the config:
+
+```js
+const inbox = mount(element, {
+  devices: [/* ... */],
+  chatActions: [
+    {
+      id: 'open-crm',
+      label: 'Open in CRM',
+      onClick: (chat, device) => {
+        window.open(`https://crm.example.com/contacts/${chat.phoneNumber}`);
+      },
+    },
+    {
+      id: 'tag-vip',
+      label: 'Tag as VIP',
+      icon: StarIcon, // optional: any component accepting { className?: string }
+      onClick: (chat, device) => {
+        fetch('/api/tag', {
+          method: 'POST',
+          body: JSON.stringify({
+            phone: chat.phoneNumber,
+            name: chat.contactName,
+            device: device.id,
+            tag: 'vip',
+          }),
+        });
+      },
+    },
+  ],
+});
+```
+
+### ChatAction type
+
+```ts
+type ChatAction = {
+  id: string;                  // Unique identifier
+  label: string;               // Button text displayed in the dialog
+  icon?: ComponentType<{       // Optional icon component (e.g., from lucide-react)
+    className?: string;
+  }>;
+  onClick: (                   // Called when the user clicks the action
+    chat: Chat,                // The chat's normalized data
+    device: DeviceConfig,      // The device the chat belongs to
+  ) => void;
+};
+```
+
+### Callback parameters
+
+The `onClick` callback receives two arguments:
+
+**`chat: Chat`** — The normalized chat data:
+- `chat.id` — Internal chat ID (JID)
+- `chat.phoneNumber` — Phone number in international format
+- `chat.contactName` — Contact name (if available)
+- `chat.profilePicUrl` — Profile picture URL (if available)
+- `chat.lastMessage` — Last message content, direction, and type
+- `chat.unreadCount` — Number of unread messages
+
+**`device: DeviceConfig`** — The device configuration for the chat:
+- `device.id` — Device ID from your config
+- `device.label` — Display name
+- `device.instanceName` — Evolution API instance name
+- `device.apiUrl` — API base URL
+
+### Behavior
+
+- A three-dot icon appears on the right side of every chat row
+- Clicking it opens a centered dialog with the contact's profile picture, name, phone number, and device name
+- Each action renders as a full-width button in the dialog
+- After clicking an action, the dialog closes automatically
+- The dialog can also be closed with the X button, clicking the backdrop, or pressing Escape
 
 ## Security
 

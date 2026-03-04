@@ -10,6 +10,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useProvider, useDeviceContext } from '@/lib/provider-context';
 import { useTranslations } from '@/lib/i18n';
 import { sanitizeUrl } from '@/lib/url-utils';
+import { ChatActionsTrigger, ChatActionsDialog, type Conversation as ChatActionsConversation } from '@/components/chat-actions-menu';
+import type { ChatAction, DeviceConfig } from '@/lib/providers/types';
 
 type Conversation = {
   id: string;
@@ -64,6 +66,7 @@ type Props = {
   isHidden?: boolean;
   instance?: string;
   provider?: string;
+  chatActions?: ChatAction[];
 };
 
 export type ConversationListRef = {
@@ -72,15 +75,16 @@ export type ConversationListRef = {
 };
 
 export const ConversationList = forwardRef<ConversationListRef, Props>(
-  ({ onSelectConversation, selectedConversationId, isHidden = false, instance }, ref) => {
+  ({ onSelectConversation, selectedConversationId, isHidden = false, instance, chatActions }, ref) => {
   const provider = useProvider();
-  const { viewMode, devices, getProviderForDevice } = useDeviceContext();
+  const { viewMode, devices, getProviderForDevice, selectedDevice } = useDeviceContext();
   const t = useTranslations();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
+  const [dialogTarget, setDialogTarget] = useState<{ conversation: Conversation; device: DeviceConfig } | null>(null);
 
   const doFetch = useCallback(async (): Promise<Conversation[]> => {
     if (viewMode === 'all') {
@@ -315,7 +319,7 @@ export const ConversationList = forwardRef<ConversationListRef, Props>(
               key={compositeKey}
               onClick={() => onSelectConversation(conversation)}
               className={cn(
-                'wa:w-full wa:text-left wa:transition-colors wa:relative wa:overflow-hidden wa:flex wa:items-center wa:cursor-pointer',
+                'wa-chat-row wa:w-full wa:text-left wa:transition-colors wa:relative wa:overflow-hidden wa:flex wa:items-center wa:cursor-pointer',
                 'hover:wa:bg-[#f5f6f6]',
                 isSelected && 'wa:bg-[#f0f2f5]'
               )}
@@ -326,7 +330,7 @@ export const ConversationList = forwardRef<ConversationListRef, Props>(
                 <div className="wa:absolute wa:left-0 wa:top-0 wa:bottom-0 wa:w-[3px] wa:bg-[#00a884]" />
               )}
 
-              <div className="wa:flex wa:gap-3.5 wa:items-center wa:w-full wa:py-3.5 wa:overflow-hidden">
+              <div className="wa:flex wa:gap-3.5 wa:items-center wa:flex-1 wa:py-3.5 wa:overflow-hidden wa:min-w-0">
                 <Avatar className="wa:h-[49px] wa:w-[49px] wa:flex-shrink-0">
                   {sanitizeUrl(conversation.profilePicUrl) && (
                     <AvatarImage src={sanitizeUrl(conversation.profilePicUrl)!} alt={conversation.contactName || conversation.phoneNumber} />
@@ -374,12 +378,34 @@ export const ConversationList = forwardRef<ConversationListRef, Props>(
                   </div>
                 </div>
               </div>
+              {/* Custom chat actions menu */}
+              {chatActions && chatActions.length > 0 && (() => {
+                const device = conversation.deviceId
+                  ? devices.find(d => d.id === conversation.deviceId)
+                  : selectedDevice;
+                return device ? (
+                  <ChatActionsTrigger
+                    onOpen={() => setDialogTarget({ conversation, device })}
+                  />
+                ) : null;
+              })()}
             </button>
             );
           })}
           </div>
         )}
       </ScrollArea>
+
+      {/* Chat actions dialog — rendered outside the button tree */}
+      {dialogTarget && chatActions && chatActions.length > 0 && (
+        <ChatActionsDialog
+          open={!!dialogTarget}
+          onClose={() => setDialogTarget(null)}
+          actions={chatActions}
+          conversation={dialogTarget.conversation}
+          device={dialogTarget.device}
+        />
+      )}
     </div>
   );
 });

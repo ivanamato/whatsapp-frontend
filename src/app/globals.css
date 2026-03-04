@@ -215,3 +215,10 @@
     display: none;
   }
 }
+
+/* Group-hover for action buttons — Tailwind v4 prefix(wa) breaks group-hover variant,
+   so we use plain CSS like the responsive sidebar workaround above. */
+.wa-chat-row:hover .wa-hover-action,
+.wa-msg-bubble:hover .wa-hover-action {
+  opacity: 1;
+}
