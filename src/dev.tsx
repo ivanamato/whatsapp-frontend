@@ -27,7 +27,7 @@ async function loadConfig(): Promise<WhatsAppMultiDeviceConfig> {
     "id": "main",
     "label": "Main",
     "apiUrl": "http://localhost:8080",
-    "apiKey": "your-api-key",
+    "instanceToken": "your-instance-token",
     "instanceName": "your-instance"
   }]
 }</pre>

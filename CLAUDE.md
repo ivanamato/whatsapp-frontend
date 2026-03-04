@@ -12,7 +12,7 @@ Available via `make` (run `make help` to list all):
 
 ```bash
 make install         # Install dependencies
-make dev             # Start Vite dev server (reads .env)
+make dev             # Start Vite dev server (reads devices.json)
 make build           # Build library (ES + UMD + CSS + .d.ts) → dist/
 make preview         # Serve built library locally
 make lint            # Run ESLint
@@ -29,7 +29,7 @@ just release-major   # Bump major version, push, and create GitHub release
 
 ## Architecture
 
-Embeddable WhatsApp inbox UI library built with Vite (library mode) + React + Tailwind CSS v4. No backend — all API calls happen directly from the browser via the provider abstraction.
+Embeddable WhatsApp inbox UI library built with Vite (library mode) + Preact + Tailwind CSS v4. No backend — all API calls happen directly from the browser via the provider abstraction.
 
 ### Entry Point
 
@@ -39,7 +39,14 @@ Embeddable WhatsApp inbox UI library built with Vite (library mode) + React + Ta
 import { mount } from '@ivanamato/whatsapp-inbox'
 import '@ivanamato/whatsapp-inbox/style.css'
 
-const inbox = mount(el, { apiUrl, apiKey, defaultInstance })
+const inbox = mount(el, {
+  devices: [{
+    id: 'main',
+    apiUrl: 'https://your-evolution-api.com',
+    instanceToken: 'your-per-instance-token',
+    instanceName: 'your-instance',
+  }],
+})
 inbox.unmount()
 ```
 
@@ -47,9 +54,9 @@ inbox.unmount()
 
 Components call the WhatsApp API directly via `useProvider()` hook (no API routes). The provider is injected via `ProviderProvider` React context.
 
-- **`src/lib/providers/types.ts`** — `WhatsAppProvider` interface and normalized types (`Instance`, `Chat`, `Message`, etc.)
-- **`src/lib/providers/evolution.ts`** — Evolution API v2 implementation (browser `fetch()`, no Node.js APIs)
-- **`src/lib/providers/index.ts`** — `createProvider(type, apiUrl, apiKey)` factory
+- **`src/lib/providers/types.ts`** — `WhatsAppProvider` interface and normalized types (`DeviceConfig`, `Chat`, `Message`, etc.)
+- **`src/lib/providers/evolution.ts`** — Evolution API v2 implementation (browser `fetch()`, no Node.js APIs). Authenticates with per-instance tokens (not the global API key).
+- **`src/lib/providers/index.ts`** — `createProvider(type, apiUrl, instanceToken)` factory
 - **`src/lib/provider-context.tsx`** — React context (`ProviderProvider` / `useProvider()`)
 
 To add a new provider: implement `WhatsAppProvider`, add a case in `createProvider()`.
@@ -62,13 +69,14 @@ To add a new provider: implement `WhatsAppProvider`, add a case in `createProvid
 - **`ConversationList`** — Left sidebar with chat list (exposes `refresh()` via ref)
 - **`MessageView`** — Right panel with message thread and composer
 
-`src/dev.tsx` is the dev server entry point (reads env vars, renders `App` inside `ProviderProvider`).
+`src/dev.tsx` is the dev server entry point (reads `devices.json`, renders `App` inside `ProviderProvider`).
 
 Auto-polling via `src/hooks/use-auto-polling.ts` (10s conversations, 5s messages, pauses when tab hidden).
 
 ### Key Patterns
 
-- **No backend.** Components call `provider.findChats()`, `provider.sendText()`, etc. directly. Requires CORS on the Evolution API (`CORS_ORIGIN=*`).
+- **No backend.** Components call `provider.findChats()`, `provider.sendText()`, etc. directly. Requires CORS on the Evolution API (`CORS_ORIGIN=*`). Uses per-instance tokens (not the global API key) so each device can only access its own instance.
+- **Per-instance tokens.** Each device authenticates with its own scoped token from the Evolution API. The token is generated when the instance is created and only grants access to that single instance. Never use the global API key in the browser.
 - **Tailwind v4 prefix.** All classes use `wa:` prefix (e.g. `wa:flex`, `wa:p-4`) to avoid collisions when embedded in host apps. CSS vars are namespaced as `--wa-*`.
 - **JID/LID deduplication.** WhatsApp uses both phone-based JIDs (`number@s.whatsapp.net`) and anonymous Logical IDs (`randomid@lid`). The provider merges these using `remoteJidAlt`.
 - **Media as base64.** `provider.getMediaUrl()` returns data URIs. File uploads are read client-side via `FileReader` before sending to `provider.sendMedia()`.
@@ -102,10 +110,18 @@ npm install @ivanamato/whatsapp-inbox
 
 ## Environment
 
-Dev server reads from `.env`:
+Dev server reads `devices.json` from the project root (see `devices.example.json`). Each device uses a **per-instance token** from the Evolution API — never use the global API key.
 
-```env
-OPENWHATS_API_URL=https://your-evolution-api.com
-OPENWHATS_API_KEY=your-api-key
-OPENWHATS_INSTANCE=optional-default-instance
+To get the per-instance token: call `GET /instance/fetchInstances` with the global API key and look for the `token` field on each instance. Then use that token as `instanceToken` in `devices.json`.
+
+```json
+{
+  "devices": [{
+    "id": "my-device",
+    "label": "My WhatsApp",
+    "apiUrl": "https://your-evolution-api.com",
+    "instanceToken": "PER-INSTANCE-TOKEN-HERE",
+    "instanceName": "your-instance"
+  }]
+}
 ```

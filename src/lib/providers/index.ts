@@ -1,9 +1,9 @@
 import { EvolutionProvider } from './evolution';
 import type { WhatsAppProvider, ProviderType } from './types';
 
-export function createProvider(type: ProviderType, apiUrl: string, apiKey: string): WhatsAppProvider {
+export function createProvider(type: ProviderType, apiUrl: string, instanceToken: string): WhatsAppProvider {
   if (type === 'evolution') {
-    return new EvolutionProvider(apiUrl, apiKey);
+    return new EvolutionProvider(apiUrl, instanceToken);
   }
   throw new Error(`Unknown provider: ${type}`);
 }

@@ -8,7 +8,8 @@ export type DeviceConfig = {
   id: string;
   label?: string;
   apiUrl: string;
-  apiKey: string;
+  /** Per-instance token from Evolution API (NOT the global API key) */
+  instanceToken: string;
   instanceName: string;
   providerType?: ProviderType;
   readonly?: boolean;

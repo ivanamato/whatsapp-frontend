@@ -446,7 +446,7 @@ export class EvolutionProvider implements WhatsAppProvider {
 
   constructor(
     private readonly baseUrl: string,
-    private readonly apiKey: string
+    private readonly instanceToken: string
   ) {}
 
   private async request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -455,7 +455,7 @@ export class EvolutionProvider implements WhatsAppProvider {
       ...options,
       headers: {
         'Content-Type': 'application/json',
-        apikey: this.apiKey,
+        apikey: this.instanceToken,
         ...options?.headers,
       },
     });

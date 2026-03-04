@@ -4,7 +4,7 @@
       "id": "prod-main",
       "label": "Production (Main)",
       "apiUrl": "https://evo-api-1.example.com",
-      "apiKey": "your-api-key-1",
+      "instanceToken": "your-api-key-1",
       "instanceName": "main-whatsapp",
       "providerType": "evolution"
     },
@@ -12,7 +12,7 @@
       "id": "support",
       "label": "Support Line",
       "apiUrl": "https://evo-api-2.example.com",
-      "apiKey": "your-api-key-2",
+      "instanceToken": "your-api-key-2",
       "instanceName": "support-whatsapp",
       "providerType": "evolution",
       "readonly": true
