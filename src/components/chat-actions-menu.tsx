@@ -1,8 +1,9 @@
-import { useEffect } from 'react';
-import { MoreVertical, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { MoreVertical, X, Loader2 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { sanitizeUrl } from '@/lib/url-utils';
-import type { ChatAction, Chat, DeviceConfig } from '@/lib/providers/types';
+import { getAvatarInitials } from '@/lib/avatar-utils';
+import type { ChatAction, ChatActionsResolver, Chat, DeviceConfig } from '@/lib/providers/types';
 
 export type Conversation = {
   id: string;
@@ -32,16 +33,6 @@ function toChat(conversation: Conversation): Chat {
   };
 }
 
-function getInitials(contactName?: string, phoneNumber?: string): string {
-  if (contactName) {
-    const words = contactName.trim().split(/\s+/);
-    if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
-    return contactName.slice(0, 2).toUpperCase();
-  }
-  if (phoneNumber) return phoneNumber.replace(/\D/g, '').slice(-2);
-  return '??';
-}
-
 export function ChatActionsTrigger({ onOpen }: { onOpen: () => void }) {
   return (
     <div
@@ -63,16 +54,45 @@ export function ChatActionsTrigger({ onOpen }: { onOpen: () => void }) {
 export function ChatActionsDialog({
   open,
   onClose,
-  actions,
+  resolver,
   conversation,
   device,
 }: {
   open: boolean;
   onClose: () => void;
-  actions: ChatAction[];
+  resolver: ChatActionsResolver;
   conversation: Conversation;
   device: DeviceConfig;
 }) {
+  const [actions, setActions] = useState<ChatAction[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    setActions([]);
+
+    Promise.resolve(resolver(toChat(conversation), device))
+      .then((resolved) => {
+        if (!cancelled) {
+          setActions(resolved);
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Failed to load actions');
+          setLoading(false);
+        }
+      });
+
+    return () => { cancelled = true; };
+  }, [open, resolver, conversation, device]);
+
   useEffect(() => {
     if (!open) return;
     const handleKey = (e: KeyboardEvent) => {
@@ -146,7 +166,7 @@ export function ChatActionsDialog({
               />
             )}
             <AvatarFallback className="wa:bg-[#dfe5e7] wa:text-[#54656f] wa:text-lg wa:font-medium">
-              {getInitials(conversation.contactName, conversation.phoneNumber)}
+              {getAvatarInitials(conversation.contactName, conversation.phoneNumber)}
             </AvatarFallback>
           </Avatar>
           <div>
@@ -166,7 +186,17 @@ export function ChatActionsDialog({
 
         {/* Action buttons */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {actions.map((action) => (
+          {loading && (
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '16px 0' }}>
+              <Loader2 className="wa:h-6 wa:w-6 wa:text-[#54656f] wa:animate-spin" />
+            </div>
+          )}
+          {error && (
+            <div style={{ textAlign: 'center', padding: '12px 0', color: '#dc3545', fontSize: 14 }}>
+              {error}
+            </div>
+          )}
+          {!loading && !error && actions.map((action) => (
             <button
               key={action.id}
               onClick={() => {

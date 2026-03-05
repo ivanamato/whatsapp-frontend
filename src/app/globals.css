@@ -199,8 +199,15 @@
 }
 
 @media (max-width: 767px) {
+  .wa-sidebar {
+    transition: transform 0.25s ease-out, opacity 0.2s ease-out;
+  }
   .wa-sidebar--hidden {
-    display: none;
+    position: absolute;
+    transform: translateX(-100%);
+    opacity: 0;
+    pointer-events: none;
+    z-index: -1;
   }
   .wa-content--hidden {
     display: none;
@@ -221,4 +228,13 @@
 .wa-chat-row:hover .wa-hover-action,
 .wa-msg-bubble:hover .wa-hover-action {
   opacity: 1;
+}
+
+/* Connection status banner animation */
+.wa-connection-banner {
+  animation: wa-slide-down 0.3s ease-out;
+}
+@keyframes wa-slide-down {
+  from { transform: translateY(-100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
 }

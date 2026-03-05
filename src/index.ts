@@ -4,7 +4,7 @@ import { ProviderProvider } from './lib/provider-context';
 import { ImperativeApiBridge, type ImperativeApi } from './imperative-bridge';
 import './app/globals.css';
 
-export type { WhatsAppProvider, ProviderType, Chat, Message, SendTextParams, SendMediaParams, SendButtonsParams, SendResult, DeviceConfig, WhatsAppMultiDeviceConfig, ChatAction } from './lib/providers/types';
+export type { WhatsAppProvider, ProviderType, Chat, Message, SendTextParams, SendMediaParams, SendButtonsParams, SendResult, DeviceConfig, WhatsAppMultiDeviceConfig, ChatAction, ChatActionsResolver } from './lib/providers/types';
 export type { Translations } from './lib/i18n';
 export { defaultTranslations, useTranslations, TranslationsProvider } from './lib/i18n';
 export { EvolutionProvider } from './lib/providers/evolution';

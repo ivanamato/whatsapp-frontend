@@ -6,6 +6,8 @@ import type {
   SendMediaParams,
   SendButtonsParams,
   SendResult,
+  FindMessagesOptions,
+  PaginatedMessages,
 } from './types';
 
 // -- API response types (matched to actual Evolution API v2 responses) --
@@ -444,6 +446,11 @@ export class EvolutionProvider implements WhatsAppProvider {
   // Cache: @s.whatsapp.net JID -> @lid JID (built during findChats)
   private phoneLidMap = new Map<string, string>();
 
+  // LRU cache for media blob URLs — avoids refetching base64 per render
+  private mediaCache = new Map<string, string>();
+  private mediaCacheOrder: string[] = [];
+  private static readonly MEDIA_CACHE_MAX = 50;
+
   constructor(
     private readonly baseUrl: string,
     private readonly instanceToken: string
@@ -641,49 +648,7 @@ export class EvolutionProvider implements WhatsAppProvider {
     }
   }
 
-  async findMessages(instanceName: string, chatId: string, limit = 50): Promise<Message[]> {
-    const isGroup = chatId.endsWith('@g.us');
-    const primaryJid = chatId.includes('@') ? chatId : `${chatId}@s.whatsapp.net`;
-
-    const fetchJid = (remoteJid: string) =>
-      this.request<{ messages: { records: EvolutionMessage[] } }>(
-        `/chat/findMessages/${encodeURIComponent(instanceName)}`,
-        {
-          method: 'POST',
-          body: JSON.stringify({
-            where: { key: { remoteJid } },
-            limit,
-          }),
-        }
-      ).then((d) => d?.messages?.records || []);
-
-    let phoneMessages: EvolutionMessage[];
-    let lidMessages: EvolutionMessage[];
-
-    if (isGroup) {
-      // Groups don't have LID duality — single fetch
-      phoneMessages = await fetchJid(primaryJid);
-      lidMessages = [];
-    } else {
-      await this.ensureLidMap(instanceName);
-      const lidJid = this.phoneLidMap.get(primaryJid);
-      [phoneMessages, lidMessages] = await Promise.all([
-        fetchJid(primaryJid),
-        lidJid ? fetchJid(lidJid) : Promise.resolve([]),
-      ]);
-    }
-
-    // Deduplicate by message key ID (same message can appear in both JID queries)
-    const seen = new Set<string>();
-    const allMessages: EvolutionMessage[] = [];
-    for (const msg of [...phoneMessages, ...lidMessages]) {
-      if (!seen.has(msg.key.id)) {
-        seen.add(msg.key.id);
-        allMessages.push(msg);
-      }
-    }
-    const phoneNumber = stripJid(primaryJid);
-
+  private convertToMessages(allMessages: EvolutionMessage[], phoneNumber: string): Message[] {
     // First pass: collect IDs of messages that were revoked (deleted for everyone)
     const revokedIds = new Set<string>();
     for (const msg of allMessages) {
@@ -695,7 +660,6 @@ export class EvolutionProvider implements WhatsAppProvider {
 
     return allMessages
       .filter((msg) => {
-        // Filter out the protocol revoke messages themselves
         const extracted = extractContent(msg);
         return extracted.messageType !== 'revoked';
       })
@@ -723,6 +687,129 @@ export class EvolutionProvider implements WhatsAppProvider {
             : {},
         };
       });
+  }
+
+  async findMessagesPaginated(
+    instanceName: string,
+    chatId: string,
+    options: FindMessagesOptions = {},
+  ): Promise<PaginatedMessages> {
+    const { page = 1, pageSize = 50 } = options;
+    const isGroup = chatId.endsWith('@g.us');
+    const primaryJid = chatId.includes('@') ? chatId : `${chatId}@s.whatsapp.net`;
+
+    type PaginatedResponse = {
+      messages: {
+        total: number;
+        pages: number;
+        currentPage: number;
+        records: EvolutionMessage[];
+      };
+    };
+
+    const fetchJidPaginated = (remoteJid: string) =>
+      this.request<PaginatedResponse>(
+        `/chat/findMessages/${encodeURIComponent(instanceName)}`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            where: { key: { remoteJid } },
+            page,
+            offset: pageSize,
+          }),
+        }
+      ).then((d) => ({
+        records: d?.messages?.records || [],
+        total: d?.messages?.total ?? 0,
+        pages: d?.messages?.pages ?? 1,
+        currentPage: d?.messages?.currentPage ?? page,
+      }));
+
+    let phoneResult: { records: EvolutionMessage[]; total: number; pages: number; currentPage: number };
+    let lidResult: { records: EvolutionMessage[]; total: number; pages: number; currentPage: number };
+
+    if (isGroup) {
+      phoneResult = await fetchJidPaginated(primaryJid);
+      lidResult = { records: [], total: 0, pages: 0, currentPage: page };
+    } else {
+      await this.ensureLidMap(instanceName);
+      const lidJid = this.phoneLidMap.get(primaryJid);
+      [phoneResult, lidResult] = await Promise.all([
+        fetchJidPaginated(primaryJid),
+        lidJid ? fetchJidPaginated(lidJid) : Promise.resolve({ records: [], total: 0, pages: 0, currentPage: page }),
+      ]);
+    }
+
+    // Deduplicate by message key ID
+    const seen = new Set<string>();
+    const allMessages: EvolutionMessage[] = [];
+    for (const msg of [...phoneResult.records, ...lidResult.records]) {
+      if (!seen.has(msg.key.id)) {
+        seen.add(msg.key.id);
+        allMessages.push(msg);
+      }
+    }
+
+    const phoneNumber = stripJid(primaryJid);
+    const messages = this.convertToMessages(allMessages, phoneNumber);
+
+    // For dual JID: use max pages from either source
+    const totalPages = Math.max(phoneResult.pages, lidResult.pages);
+    const total = phoneResult.total + lidResult.total;
+
+    return {
+      messages,
+      pagination: {
+        currentPage: page,
+        totalPages,
+        total,
+        hasMore: page < totalPages,
+      },
+    };
+  }
+
+  async findMessages(instanceName: string, chatId: string, limit = 50): Promise<Message[]> {
+    const isGroup = chatId.endsWith('@g.us');
+    const primaryJid = chatId.includes('@') ? chatId : `${chatId}@s.whatsapp.net`;
+
+    const fetchJid = (remoteJid: string) =>
+      this.request<{ messages: { records: EvolutionMessage[] } }>(
+        `/chat/findMessages/${encodeURIComponent(instanceName)}`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            where: { key: { remoteJid } },
+            limit,
+          }),
+        }
+      ).then((d) => d?.messages?.records || []);
+
+    let phoneMessages: EvolutionMessage[];
+    let lidMessages: EvolutionMessage[];
+
+    if (isGroup) {
+      phoneMessages = await fetchJid(primaryJid);
+      lidMessages = [];
+    } else {
+      await this.ensureLidMap(instanceName);
+      const lidJid = this.phoneLidMap.get(primaryJid);
+      [phoneMessages, lidMessages] = await Promise.all([
+        fetchJid(primaryJid),
+        lidJid ? fetchJid(lidJid) : Promise.resolve([]),
+      ]);
+    }
+
+    // Deduplicate by message key ID
+    const seen = new Set<string>();
+    const allMessages: EvolutionMessage[] = [];
+    for (const msg of [...phoneMessages, ...lidMessages]) {
+      if (!seen.has(msg.key.id)) {
+        seen.add(msg.key.id);
+        allMessages.push(msg);
+      }
+    }
+
+    return this.convertToMessages(allMessages, stripJid(primaryJid));
   }
 
   async sendText(instanceName: string, params: SendTextParams): Promise<SendResult> {
@@ -796,7 +883,24 @@ export class EvolutionProvider implements WhatsAppProvider {
     });
   }
 
+  private evictMediaCache(): void {
+    while (this.mediaCacheOrder.length > EvolutionProvider.MEDIA_CACHE_MAX) {
+      const oldest = this.mediaCacheOrder.shift()!;
+      const url = this.mediaCache.get(oldest);
+      if (url) {
+        URL.revokeObjectURL(url);
+        this.mediaCache.delete(oldest);
+      }
+    }
+  }
+
   async getMediaUrl(instanceName: string, messageId: string): Promise<string | null> {
+    // Check cache first (empty string = cached failure)
+    if (this.mediaCache.has(messageId)) {
+      const cached = this.mediaCache.get(messageId)!;
+      return cached || null;
+    }
+
     try {
       // Fetch the full message object so the Evolution API has mediaKey/directPath
       // to decrypt and download media (passing only key.id often fails for audio)
@@ -812,7 +916,12 @@ export class EvolutionProvider implements WhatsAppProvider {
       );
 
       const fullMessage = msgData?.messages?.records?.[0];
-      if (!fullMessage) return null;
+      if (!fullMessage) {
+        if (process.env.NODE_ENV !== 'production') {
+          console.warn(`[WhatsApp Inbox] getMediaUrl: message not found for id=${messageId}`);
+        }
+        return null;
+      }
 
       const data = await this.request<{ base64?: string; mimetype?: string }>(
         `/chat/getBase64FromMediaMessage/${encodeURIComponent(instanceName)}`,
@@ -829,15 +938,40 @@ export class EvolutionProvider implements WhatsAppProvider {
       );
 
       if (data.base64 && data.mimetype) {
-        // Validate MIME type before constructing data URI to prevent script execution
-        const SAFE_MEDIA_MIMES = /^(image\/(?:jpeg|png|gif|webp|bmp|tiff)|video|audio|application\/(pdf|octet-stream))\//i;
+        // Validate MIME type before constructing blob URL to prevent script execution
+        const SAFE_MEDIA_MIMES = /^(image\/(jpeg|png|gif|webp|bmp|tiff|svg\+xml)|video\/|audio\/|application\/(pdf|octet-stream))/i;
         if (!SAFE_MEDIA_MIMES.test(data.mimetype)) {
+          if (process.env.NODE_ENV !== 'production') {
+            console.warn(`[WhatsApp Inbox] getMediaUrl: rejected MIME type "${data.mimetype}" for id=${messageId}`);
+          }
           return null;
         }
-        return `data:${data.mimetype};base64,${data.base64}`;
+
+        // Convert base64 to Blob URL — much less memory than data URI strings
+        // Strip whitespace (APIs often return MIME-formatted base64 with line breaks)
+        const byteChars = atob(data.base64.replace(/\s/g, ''));
+        const byteArray = new Uint8Array(byteChars.length);
+        for (let i = 0; i < byteChars.length; i++) {
+          byteArray[i] = byteChars.charCodeAt(i);
+        }
+        const blob = new Blob([byteArray], { type: data.mimetype });
+        const blobUrl = URL.createObjectURL(blob);
+
+        // Store in LRU cache
+        this.mediaCache.set(messageId, blobUrl);
+        this.mediaCacheOrder.push(messageId);
+        this.evictMediaCache();
+
+        return blobUrl;
+      }
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn(`[WhatsApp Inbox] getMediaUrl: no base64/mimetype in response for id=${messageId}`, { hasBase64: !!data.base64, mimetype: data.mimetype });
       }
       return null;
-    } catch {
+    } catch (err) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn(`[WhatsApp Inbox] getMediaUrl failed for id=${messageId}:`, err);
+      }
       return null;
     }
   }

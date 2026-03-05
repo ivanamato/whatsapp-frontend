@@ -190,23 +190,42 @@
             }
           };
 
-          // --- Chat Actions: custom buttons in the chat row dropdown ---
-          config.chatActions = [
-            {
-              id: 'open-crm',
-              label: 'Open in CRM',
-              onClick: (chat, device) => {
-                alert('Open CRM for ' + (chat.contactName || chat.phoneNumber) + ' (device: ' + device.id + ')');
-              }
-            },
-            {
-              id: 'tag-customer',
-              label: 'Tag Customer',
-              onClick: (chat, device) => {
-                alert('Tag ' + (chat.contactName || chat.phoneNumber) + ' on device ' + device.id);
-              }
+          // --- Chat Actions: async resolver returns different buttons per chat ---
+          config.chatActions = async (chat, device) => {
+            // Simulate an async lookup (e.g., CRM check)
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            const isKnown = chat.contactName && chat.contactName !== chat.phoneNumber;
+
+            if (isKnown) {
+              return [
+                {
+                  id: 'view-customer',
+                  label: 'See Customer',
+                  onClick: (chat, device) => {
+                    alert('View customer ' + chat.contactName + ' (device: ' + device.id + ')');
+                  }
+                },
+                {
+                  id: 'tag-customer',
+                  label: 'Tag Customer',
+                  onClick: (chat, device) => {
+                    alert('Tag ' + chat.contactName + ' on device ' + device.id);
+                  }
+                }
+              ];
             }
-          ];
+
+            return [
+              {
+                id: 'search-customer',
+                label: 'Search Customer',
+                onClick: (chat, device) => {
+                  alert('Search CRM for ' + chat.phoneNumber + ' (device: ' + device.id + ')');
+                }
+              }
+            ];
+          };
 
           inboxRef.value = WhatsAppInbox.mount(inboxContainer.value, config);
         }

@@ -33,7 +33,7 @@ export function sanitizeUrl(url: string | undefined | null): string | null {
 
   try {
     const parsed = new URL(url);
-    if (parsed.protocol === 'https:' || parsed.protocol === 'http:') {
+    if (parsed.protocol === 'https:' || parsed.protocol === 'http:' || parsed.protocol === 'blob:') {
       return url;
     }
     return null;

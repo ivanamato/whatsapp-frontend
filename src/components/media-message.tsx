@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -6,6 +6,7 @@ import { AudioPlayer } from '@/components/audio-player';
 import { useProvider } from '@/lib/provider-context';
 import { useTranslations } from '@/lib/i18n';
 import { sanitizeUrl, sanitizeDisplayFilename } from '@/lib/url-utils';
+import type { WhatsAppProvider } from '@/lib/providers/types';
 
 type Props = {
   mediaId: string;
@@ -14,22 +15,45 @@ type Props = {
   filename?: string | null;
   isOutbound?: boolean;
   instance?: string;
+  providerOverride?: WhatsAppProvider;
 };
 
-export function MediaMessage({ mediaId, messageType, caption, filename, isOutbound, instance }: Props) {
-  const provider = useProvider();
+export function MediaMessage({ mediaId, messageType, caption, filename, isOutbound, instance, providerOverride }: Props) {
+  const contextProvider = useProvider();
+  const provider = providerOverride || contextProvider;
   const t = useTranslations();
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
+  const [isVisible, setIsVisible] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const handleLoadError = useCallback(() => {
     setLoadFailed(true);
   }, []);
 
+  // Lazy-load: only fetch media when the element is visible in the viewport
   useEffect(() => {
-    if (!instance) {
-      setLoading(false);
+    const el = containerRef.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: '200px' } // Start loading 200px before visible
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!isVisible || !instance) {
+      if (!instance) setLoading(false);
       return;
     }
 
@@ -53,11 +77,11 @@ export function MediaMessage({ mediaId, messageType, caption, filename, isOutbou
     return () => {
       cancelled = true;
     };
-  }, [mediaId, instance, provider]);
+  }, [mediaId, instance, provider, isVisible]);
 
-  if (loading) {
+  if (!isVisible || loading) {
     return (
-      <div className="wa:w-64 wa:h-48 wa:rounded wa:flex wa:items-center wa:justify-center">
+      <div ref={containerRef} className="wa:w-64 wa:h-48 wa:rounded wa:flex wa:items-center wa:justify-center">
         <Skeleton className="wa:w-full wa:h-full" />
       </div>
     );
@@ -66,7 +90,7 @@ export function MediaMessage({ mediaId, messageType, caption, filename, isOutbou
   if (loadFailed || !mediaUrl) {
     const isAudioType = messageType === 'audio';
     return (
-      <div className={cn(
+      <div ref={containerRef} className={cn(
         'wa:bg-muted wa:rounded wa:flex wa:items-center wa:justify-center',
         isAudioType ? 'wa:min-w-[240px] wa:h-12 wa:px-4' : 'wa:w-64 wa:h-48'
       )}>
@@ -78,7 +102,7 @@ export function MediaMessage({ mediaId, messageType, caption, filename, isOutbou
   }
 
   return (
-    <div>
+    <div ref={containerRef}>
       {messageType === 'image' && (
         <img
           src={sanitizeUrl(mediaUrl) ?? ''}

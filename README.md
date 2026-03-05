@@ -103,7 +103,7 @@ type WhatsAppMultiDeviceConfig = {
   devices: DeviceConfig[];
   defaultDeviceId?: string;
   translations?: Partial<Translations>;
-  chatActions?: ChatAction[];
+  chatActions?: ChatActionsResolver;
 };
 ```
 
@@ -119,7 +119,7 @@ type WhatsAppMultiDeviceConfig = {
 | `devices[].readonly` | No | If `true`, disables sending messages |
 | `defaultDeviceId` | No | ID of the device to select on mount |
 | `translations` | No | Override UI strings (see [Translations](#translations)) |
-| `chatActions` | No | Custom action buttons per chat row (see [Custom Chat Actions](#custom-chat-actions)) |
+| `chatActions` | No | Async resolver for per-chat action buttons (see [Custom Chat Actions](#custom-chat-actions)) |
 
 ## Imperative API
 
@@ -230,46 +230,75 @@ type SendResult = { messageId: string; status?: string };
 
 Chat actions add configurable buttons to each conversation row. When a user clicks the three-dot icon on a chat row, a dialog opens showing the contact's profile picture, name, phone number, device name, and your custom action buttons.
 
-This is useful for integrating the inbox with external systems like CRMs, tagging tools, or custom workflows.
+Actions are resolved **dynamically** via an async callback — you can return different buttons depending on the chat, the device, or external data (e.g., whether the contact already exists in your CRM).
 
 ### Configuration
 
-Pass a `chatActions` array in the config:
+Pass a `chatActions` resolver function in the config:
 
 ```js
 const inbox = mount(element, {
   devices: [/* ... */],
-  chatActions: [
-    {
-      id: 'open-crm',
-      label: 'Open in CRM',
-      onClick: (chat, device) => {
-        window.open(`https://crm.example.com/contacts/${chat.phoneNumber}`);
+  chatActions: async (chat, device) => {
+    // Example: fetch CRM status and return different actions
+    const customer = await fetch(`/api/crm/lookup?phone=${chat.phoneNumber}`)
+      .then(r => r.json())
+      .catch(() => null);
+
+    if (customer) {
+      return [
+        {
+          id: 'view-customer',
+          label: 'See Customer',
+          onClick: () => window.open(`/crm/customers/${customer.id}`),
+        },
+      ];
+    }
+
+    return [
+      {
+        id: 'search-customer',
+        label: 'Search Customer',
+        onClick: () => window.open(`/crm/search?phone=${chat.phoneNumber}`),
       },
-    },
-    {
-      id: 'tag-vip',
-      label: 'Tag as VIP',
-      icon: StarIcon, // optional: any component accepting { className?: string }
-      onClick: (chat, device) => {
-        fetch('/api/tag', {
-          method: 'POST',
-          body: JSON.stringify({
-            phone: chat.phoneNumber,
-            name: chat.contactName,
-            device: device.id,
-            tag: 'vip',
-          }),
-        });
-      },
-    },
-  ],
+    ];
+  },
 });
 ```
 
-### ChatAction type
+You can also return actions synchronously if no async lookup is needed:
+
+```js
+chatActions: (chat, device) => [
+  {
+    id: 'open-crm',
+    label: 'Open in CRM',
+    onClick: (chat, device) => {
+      window.open(`https://crm.example.com/contacts/${chat.phoneNumber}`);
+    },
+  },
+  {
+    id: 'tag-vip',
+    label: 'Tag as VIP',
+    icon: StarIcon, // optional: any component accepting { className?: string }
+    onClick: (chat, device) => {
+      fetch('/api/tag', {
+        method: 'POST',
+        body: JSON.stringify({ phone: chat.phoneNumber, device: device.id, tag: 'vip' }),
+      });
+    },
+  },
+],
+```
+
+### Types
 
 ```ts
+type ChatActionsResolver = (
+  chat: Chat,
+  device: DeviceConfig,
+) => ChatAction[] | Promise<ChatAction[]>;
+
 type ChatAction = {
   id: string;                  // Unique identifier
   label: string;               // Button text displayed in the dialog
@@ -285,7 +314,7 @@ type ChatAction = {
 
 ### Callback parameters
 
-The `onClick` callback receives two arguments:
+The resolver and each action's `onClick` receive two arguments:
 
 **`chat: Chat`** — The normalized chat data:
 - `chat.id` — Internal chat ID (JID)
@@ -303,9 +332,11 @@ The `onClick` callback receives two arguments:
 
 ### Behavior
 
-- A three-dot icon appears on the right side of every chat row
+- A three-dot icon appears on the right side of every chat row when `chatActions` is defined
 - Clicking it opens a centered dialog with the contact's profile picture, name, phone number, and device name
-- Each action renders as a full-width button in the dialog
+- While the resolver is running, a loading spinner is displayed
+- If the resolver throws, an error message is shown in the dialog
+- Each resolved action renders as a full-width button in the dialog
 - After clicking an action, the dialog closes automatically
 - The dialog can also be closed with the X button, clicking the backdrop, or pressing Escape
 

@@ -2,8 +2,9 @@ import { useState, useRef, useCallback, useEffect, type RefObject } from 'react'
 import { ConversationList, type ConversationListRef } from '@/components/conversation-list';
 import { MessageView } from '@/components/message-view';
 import { InstanceSelector } from '@/components/instance-selector';
+import { ConnectionStatus } from '@/components/connection-status';
 import { useDeviceContext } from '@/lib/provider-context';
-import type { ChatAction } from '@/lib/providers/types';
+import type { ChatActionsResolver } from '@/lib/providers/types';
 
 type Conversation = {
   id: string;
@@ -16,7 +17,7 @@ type Conversation = {
 
 type AppProps = {
   conversationListRef?: RefObject<ConversationListRef | null>;
-  chatActions?: ChatAction[];
+  chatActions?: ChatActionsResolver;
 };
 
 export function App({ conversationListRef: externalRef, chatActions }: AppProps = {}) {
@@ -79,9 +80,24 @@ export function App({ conversationListRef: externalRef, chatActions }: AppProps 
     }
   };
 
-  const handleBackToList = () => {
+  const handleBackToList = useCallback(() => {
     setSelectedConversation(undefined);
-  };
+  }, []);
+
+  // Keyboard navigation: Escape to go back to list
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && selectedConversation) {
+        // Don't interfere with open dialogs
+        const hasDialog = document.querySelector('[data-radix-dialog-overlay]');
+        if (!hasDialog) {
+          setSelectedConversation(undefined);
+        }
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [selectedConversation]);
 
   return (
     <div className="wa:h-screen wa:flex wa:flex-col wa:bg-[#d1d7db]">
@@ -94,6 +110,9 @@ export function App({ conversationListRef: externalRef, chatActions }: AppProps 
           </div>
         </div>
       </div>
+
+      {/* Connection status banner */}
+      <ConnectionStatus />
 
       {/* Main chat layout — negative margin to overlap with the teal bar */}
       <div className="wa:flex-1 wa:min-h-0 wa:w-full" style={{ marginTop: -68, padding: '0 19px 19px' }}>

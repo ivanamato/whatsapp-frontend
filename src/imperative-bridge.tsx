@@ -1,8 +1,9 @@
 import { forwardRef, useImperativeHandle, useRef } from 'react';
 import { useProvider, useDeviceContext } from '@/lib/provider-context';
 import { App } from '@/App';
+import { ErrorBoundary } from '@/components/error-boundary';
 import type { ConversationListRef } from '@/components/conversation-list';
-import type { Chat, Message, SendResult, SendTextParams, ChatAction } from '@/lib/providers/types';
+import type { Chat, Message, SendResult, SendTextParams, ChatActionsResolver } from '@/lib/providers/types';
 
 export type ImperativeApi = {
   getChats: () => Promise<Chat[]>;
@@ -15,7 +16,7 @@ export type ImperativeApi = {
 };
 
 type Props = {
-  chatActions?: ChatAction[];
+  chatActions?: ChatActionsResolver;
 };
 
 export const ImperativeApiBridge = forwardRef<ImperativeApi, Props>(
@@ -58,10 +59,12 @@ export const ImperativeApiBridge = forwardRef<ImperativeApi, Props>(
     }), [provider, selectedDevice, selectDevice, devices, getProviderForDevice]);
 
     return (
-      <App
-        conversationListRef={conversationListRef}
-        chatActions={chatActions}
-      />
+      <ErrorBoundary>
+        <App
+          conversationListRef={conversationListRef}
+          chatActions={chatActions}
+        />
+      </ErrorBoundary>
     );
   }
 );

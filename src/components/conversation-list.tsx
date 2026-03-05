@@ -1,17 +1,18 @@
-import { useEffect, useState, forwardRef, useImperativeHandle, useCallback } from 'react';
+import { useEffect, useState, useMemo, useRef, forwardRef, useImperativeHandle, useCallback } from 'react';
 import { format, isValid, isToday, isYesterday } from 'date-fns';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { RefreshCw, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAutoPolling } from '@/hooks/use-auto-polling';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useProvider, useDeviceContext } from '@/lib/provider-context';
 import { useTranslations } from '@/lib/i18n';
 import { sanitizeUrl } from '@/lib/url-utils';
+import { getAvatarInitials } from '@/lib/avatar-utils';
 import { ChatActionsTrigger, ChatActionsDialog, type Conversation as ChatActionsConversation } from '@/components/chat-actions-menu';
-import type { ChatAction, DeviceConfig } from '@/lib/providers/types';
+import type { ChatActionsResolver, DeviceConfig } from '@/lib/providers/types';
 
 type Conversation = {
   id: string;
@@ -43,30 +44,13 @@ function formatConversationDate(timestamp: string, yesterdayLabel: string): stri
   }
 }
 
-function getAvatarInitials(contactName?: string, phoneNumber?: string): string {
-  if (contactName) {
-    const words = contactName.trim().split(/\s+/);
-    if (words.length >= 2) {
-      return (words[0][0] + words[1][0]).toUpperCase();
-    }
-    return contactName.slice(0, 2).toUpperCase();
-  }
-
-  if (phoneNumber) {
-    const digits = phoneNumber.replace(/\D/g, '');
-    return digits.slice(-2);
-  }
-
-  return '??';
-}
-
 type Props = {
   onSelectConversation: (conversation: Conversation) => void;
   selectedConversationId?: string;
   isHidden?: boolean;
   instance?: string;
   provider?: string;
-  chatActions?: ChatAction[];
+  chatActions?: ChatActionsResolver;
 };
 
 export type ConversationListRef = {
@@ -85,27 +69,54 @@ export const ConversationList = forwardRef<ConversationListRef, Props>(
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const [dialogTarget, setDialogTarget] = useState<{ conversation: Conversation; device: DeviceConfig } | null>(null);
+  const scrollParentRef = useRef<HTMLDivElement>(null);
 
   const doFetch = useCallback(async (): Promise<Conversation[]> => {
     if (viewMode === 'all') {
-      const results = await Promise.allSettled(
-        devices.map(async (device) => {
-          const deviceProvider = getProviderForDevice(device);
-          const chats = await deviceProvider.findChats(device.instanceName);
-          return chats.map((chat) => ({
-            id: chat.id,
-            phoneNumber: chat.phoneNumber,
-            status: 'active',
-            lastActiveAt: chat.lastActiveAt || '',
-            contactName: chat.contactName,
-            profilePicUrl: chat.profilePicUrl,
-            lastMessage: chat.lastMessage,
-            unreadCount: chat.unreadCount,
-            deviceId: device.id,
-            deviceLabel: device.label || device.instanceName,
-          }));
-        })
-      );
+      // Concurrent pool to avoid saturating the browser connection limit
+      const MAX_CONCURRENT = 3;
+      const results: PromiseSettledResult<Conversation[]>[] = [];
+      const pending: Promise<void>[] = [];
+
+      for (const device of devices) {
+        const task = (async () => {
+          try {
+            const deviceProvider = getProviderForDevice(device);
+            const chats = await deviceProvider.findChats(device.instanceName);
+            results.push({
+              status: 'fulfilled',
+              value: chats.map((chat) => ({
+                id: chat.id,
+                phoneNumber: chat.phoneNumber,
+                status: 'active',
+                lastActiveAt: chat.lastActiveAt || '',
+                contactName: chat.contactName,
+                profilePicUrl: chat.profilePicUrl,
+                lastMessage: chat.lastMessage,
+                unreadCount: chat.unreadCount,
+                deviceId: device.id,
+                deviceLabel: device.label || device.instanceName,
+              })),
+            });
+          } catch (reason) {
+            results.push({ status: 'rejected', reason });
+          }
+        })();
+
+        pending.push(task);
+
+        if (pending.length >= MAX_CONCURRENT) {
+          await Promise.race(pending);
+          // Remove settled promises
+          for (let i = pending.length - 1; i >= 0; i--) {
+            const settled = await Promise.race([pending[i].then(() => true), Promise.resolve(false)]);
+            if (settled) pending.splice(i, 1);
+          }
+        }
+      }
+
+      await Promise.all(pending);
+
       const merged: Conversation[] = [];
       for (const result of results) {
         if (result.status === 'fulfilled') {
@@ -195,13 +206,21 @@ export const ConversationList = forwardRef<ConversationListRef, Props>(
     selectByPhoneNumber
   }));
 
-  const filteredConversations = conversations.filter((conv) => {
+  const filteredConversations = useMemo(() => {
+    if (!searchQuery) return conversations;
     const query = searchQuery.toLowerCase();
-    return (
+    return conversations.filter((conv) =>
       conv.phoneNumber.toLowerCase().includes(query) ||
       conv.contactName?.toLowerCase().includes(query) ||
       conv.deviceLabel?.toLowerCase().includes(query)
     );
+  }, [conversations, searchQuery]);
+
+  const rowVirtualizer = useVirtualizer({
+    count: filteredConversations.length,
+    getScrollElement: () => scrollParentRef.current,
+    estimateSize: () => 72,
+    overscan: 8,
   });
 
   // Loading skeleton
@@ -298,110 +317,117 @@ export const ConversationList = forwardRef<ConversationListRef, Props>(
         </div>
       </div>
 
-      {/* Conversation list */}
-      <ScrollArea className="wa:flex-1 wa:h-0 wa:overflow-hidden">
+      {/* Virtualized conversation list */}
+      <div ref={scrollParentRef} className="wa:flex-1 wa:overflow-auto" style={{ contain: 'strict' }}>
         {filteredConversations.length === 0 ? (
           <div className="wa:py-8 wa:text-center wa:text-[#667781] wa:text-[14px]">
             {searchQuery ? t('conversationList.noConversationsFound') : t('conversationList.noConversationsYet')}
           </div>
         ) : (
-          <div className="wa:w-full wa:overflow-hidden">
-          {filteredConversations.map((conversation) => {
-            const compositeKey = conversation.deviceId
-              ? `${conversation.deviceId}::${conversation.id}`
-              : conversation.id;
-            const isSelected = viewMode === 'all'
-              ? selectedConversationId === compositeKey
-              : selectedConversationId === conversation.id;
+          <div style={{ height: `${rowVirtualizer.getTotalSize()}px`, width: '100%', position: 'relative' }}>
+            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+              const conversation = filteredConversations[virtualRow.index];
+              const compositeKey = conversation.deviceId
+                ? `${conversation.deviceId}::${conversation.id}`
+                : conversation.id;
+              const isSelected = viewMode === 'all'
+                ? selectedConversationId === compositeKey
+                : selectedConversationId === conversation.id;
 
-            return (
-            <button
-              key={compositeKey}
-              onClick={() => onSelectConversation(conversation)}
-              className={cn(
-                'wa-chat-row wa:w-full wa:text-left wa:transition-colors wa:relative wa:overflow-hidden wa:flex wa:items-center wa:cursor-pointer',
-                'hover:wa:bg-[#f5f6f6]',
-                isSelected && 'wa:bg-[#f0f2f5]'
-              )}
-              style={{ padding: '5px 15px 5px 13px' }}
-            >
-              {/* Green left accent bar for selected conversation */}
-              {isSelected && (
-                <div className="wa:absolute wa:left-0 wa:top-0 wa:bottom-0 wa:w-[3px] wa:bg-[#00a884]" />
-              )}
+              return (
+                <button
+                  key={compositeKey}
+                  data-index={virtualRow.index}
+                  ref={rowVirtualizer.measureElement}
+                  onClick={() => onSelectConversation(conversation)}
+                  className={cn(
+                    'wa-chat-row wa:w-full wa:text-left wa:transition-colors wa:relative wa:overflow-hidden wa:flex wa:items-center wa:cursor-pointer',
+                    'hover:wa:bg-[#f5f6f6]',
+                    isSelected && 'wa:bg-[#f0f2f5]'
+                  )}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    transform: `translateY(${virtualRow.start}px)`,
+                    padding: '5px 15px 5px 13px',
+                  }}
+                >
+                  {isSelected && (
+                    <div className="wa:absolute wa:left-0 wa:top-0 wa:bottom-0 wa:w-[3px] wa:bg-[#00a884]" />
+                  )}
 
-              <div className="wa:flex wa:gap-3.5 wa:items-center wa:flex-1 wa:py-3.5 wa:overflow-hidden wa:min-w-0">
-                <Avatar className="wa:h-[49px] wa:w-[49px] wa:flex-shrink-0">
-                  {sanitizeUrl(conversation.profilePicUrl) && (
-                    <AvatarImage src={sanitizeUrl(conversation.profilePicUrl)!} alt={conversation.contactName || conversation.phoneNumber} />
-                  )}
-                  <AvatarFallback className="wa:bg-[#dfe5e7] wa:text-[#54656f] wa:text-sm wa:font-medium">
-                    {getAvatarInitials(conversation.contactName, conversation.phoneNumber)}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="wa:flex-1 wa:min-w-0 wa:overflow-hidden">
-                  <div className="wa:flex wa:justify-between wa:items-baseline wa:gap-2">
-                    <p className="wa:text-[17px] wa:font-normal wa:text-[#111b21] wa:truncate wa:leading-[21px]">
-                      {conversation.contactName || conversation.phoneNumber}
-                    </p>
-                    <span className={cn(
-                      "wa:text-[12px] wa:flex-shrink-0 wa:leading-[14px]",
-                      conversation.unreadCount && conversation.unreadCount > 0
-                        ? "wa:text-[#00a884]"
-                        : "wa:text-[#667781]"
-                    )}>
-                      {formatConversationDate(conversation.lastActiveAt, t('conversationList.yesterday'))}
-                    </span>
-                  </div>
-                  {/* Device badge in all-devices mode */}
-                  {viewMode === 'all' && conversation.deviceLabel && (
-                    <p className="wa:text-[11px] wa:text-[#667781] wa:truncate wa:leading-[14px]">
-                      {conversation.deviceLabel}
-                    </p>
-                  )}
-                  <div className="wa:flex wa:justify-between wa:items-center wa:gap-2 wa:mt-[2px]">
-                    {conversation.lastMessage ? (
-                      <p className="wa:text-[14px] wa:text-[#667781] wa:truncate wa:leading-[20px]">
-                        {conversation.lastMessage.direction === 'outbound' && (
-                          <span className="wa:text-[#53bdeb]">✓ </span>
+                  <div className="wa:flex wa:gap-3.5 wa:items-center wa:flex-1 wa:py-3.5 wa:overflow-hidden wa:min-w-0">
+                    <Avatar className="wa:h-[49px] wa:w-[49px] wa:flex-shrink-0">
+                      {sanitizeUrl(conversation.profilePicUrl) && (
+                        <AvatarImage src={sanitizeUrl(conversation.profilePicUrl)!} alt={conversation.contactName || conversation.phoneNumber} />
+                      )}
+                      <AvatarFallback className="wa:bg-[#dfe5e7] wa:text-[#54656f] wa:text-sm wa:font-medium">
+                        {getAvatarInitials(conversation.contactName, conversation.phoneNumber)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="wa:flex-1 wa:min-w-0 wa:overflow-hidden">
+                      <div className="wa:flex wa:justify-between wa:items-baseline wa:gap-2">
+                        <p className="wa:text-[17px] wa:font-normal wa:text-[#111b21] wa:truncate wa:leading-[21px]">
+                          {conversation.contactName || conversation.phoneNumber}
+                        </p>
+                        <span className={cn(
+                          "wa:text-[12px] wa:flex-shrink-0 wa:leading-[14px]",
+                          conversation.unreadCount && conversation.unreadCount > 0
+                            ? "wa:text-[#00a884]"
+                            : "wa:text-[#667781]"
+                        )}>
+                          {formatConversationDate(conversation.lastActiveAt, t('conversationList.yesterday'))}
+                        </span>
+                      </div>
+                      {viewMode === 'all' && conversation.deviceLabel && (
+                        <p className="wa:text-[11px] wa:text-[#667781] wa:truncate wa:leading-[14px]">
+                          {conversation.deviceLabel}
+                        </p>
+                      )}
+                      <div className="wa:flex wa:justify-between wa:items-center wa:gap-2 wa:mt-[2px]">
+                        {conversation.lastMessage ? (
+                          <p className="wa:text-[14px] wa:text-[#667781] wa:truncate wa:leading-[20px]">
+                            {conversation.lastMessage.direction === 'outbound' && (
+                              <span className="wa:text-[#53bdeb]">✓ </span>
+                            )}
+                            {conversation.lastMessage.content}
+                          </p>
+                        ) : (
+                          <span />
                         )}
-                        {conversation.lastMessage.content}
-                      </p>
-                    ) : (
-                      <span />
-                    )}
-                    {conversation.unreadCount != null && conversation.unreadCount > 0 && (
-                      <span className="wa:flex-shrink-0 wa:bg-[#00a884] wa:text-white wa:text-[11px] wa:font-bold wa:rounded-full wa:min-w-[20px] wa:h-[20px] wa:flex wa:items-center wa:justify-center wa:px-1">
-                        {conversation.unreadCount}
-                      </span>
-                    )}
+                        {conversation.unreadCount != null && conversation.unreadCount > 0 && (
+                          <span className="wa:flex-shrink-0 wa:bg-[#00a884] wa:text-white wa:text-[11px] wa:font-bold wa:rounded-full wa:min-w-[20px] wa:h-[20px] wa:flex wa:items-center wa:justify-center wa:px-1">
+                            {conversation.unreadCount}
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
-              {/* Custom chat actions menu */}
-              {chatActions && chatActions.length > 0 && (() => {
-                const device = conversation.deviceId
-                  ? devices.find(d => d.id === conversation.deviceId)
-                  : selectedDevice;
-                return device ? (
-                  <ChatActionsTrigger
-                    onOpen={() => setDialogTarget({ conversation, device })}
-                  />
-                ) : null;
-              })()}
-            </button>
-            );
-          })}
+                  {chatActions && (() => {
+                    const device = conversation.deviceId
+                      ? devices.find(d => d.id === conversation.deviceId)
+                      : selectedDevice;
+                    return device ? (
+                      <ChatActionsTrigger
+                        onOpen={() => setDialogTarget({ conversation, device })}
+                      />
+                    ) : null;
+                  })()}
+                </button>
+              );
+            })}
           </div>
         )}
-      </ScrollArea>
+      </div>
 
       {/* Chat actions dialog — rendered outside the button tree */}
-      {dialogTarget && chatActions && chatActions.length > 0 && (
+      {dialogTarget && chatActions && (
         <ChatActionsDialog
           open={!!dialogTarget}
           onClose={() => setDialogTarget(null)}
-          actions={chatActions}
+          resolver={chatActions}
           conversation={dialogTarget.conversation}
           device={dialogTarget.device}
         />

@@ -26,6 +26,7 @@ export type Translations = {
   'messageView.outside24HourWindow': string;
   'messageView.today': string;
   'messageView.yesterday': string;
+  'messageView.loadingOlderMessages': string;
 
   // Instance selector
   'instanceSelector.loadingDevices': string;
@@ -94,6 +95,14 @@ export type Translations = {
   // Media message
   'mediaMessage.unavailable': string;
   'mediaMessage.downloadDocument': string;
+
+  // File upload errors
+  'messageView.fileTooLarge': string;
+  'messageView.fileTypeNotAllowed': string;
+
+  // Connection status
+  'connectionStatus.connecting': string;
+  'connectionStatus.disconnected': string;
 };
 
 export const defaultTranslations: Translations = {
@@ -122,6 +131,7 @@ export const defaultTranslations: Translations = {
   'messageView.outside24HourWindow': 'Last message was over 24 hours ago. Send a template message or wait for the user to message you.',
   'messageView.today': 'Today',
   'messageView.yesterday': 'Yesterday',
+  'messageView.loadingOlderMessages': 'Loading older messages...',
 
   // Instance selector
   'instanceSelector.loadingDevices': 'Loading devices...',
@@ -190,6 +200,14 @@ export const defaultTranslations: Translations = {
   // Media message
   'mediaMessage.unavailable': 'Media unavailable',
   'mediaMessage.downloadDocument': 'Download document',
+
+  // File upload errors
+  'messageView.fileTooLarge': 'File exceeds 16 MB limit',
+  'messageView.fileTypeNotAllowed': 'File type not supported',
+
+  // Connection status
+  'connectionStatus.connecting': 'Connecting to WhatsApp...',
+  'connectionStatus.disconnected': 'WhatsApp disconnected. Messages may not be delivered.',
 };
 
 type TranslationFunction = {

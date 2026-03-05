@@ -22,11 +22,13 @@ export type ChatAction = {
   onClick: (chat: Chat, device: DeviceConfig) => void;
 };
 
+export type ChatActionsResolver = (chat: Chat, device: DeviceConfig) => ChatAction[] | Promise<ChatAction[]>;
+
 export type WhatsAppMultiDeviceConfig = {
   devices: DeviceConfig[];
   defaultDeviceId?: string;
   translations?: Partial<import('../i18n').Translations>;
-  chatActions?: ChatAction[];
+  chatActions?: ChatActionsResolver;
 };
 
 export type Chat = {
@@ -92,6 +94,21 @@ export type SendResult = {
   status?: string;
 };
 
+export type FindMessagesOptions = {
+  page?: number;      // 1-based, default 1
+  pageSize?: number;  // items per page, default 50
+};
+
+export type PaginatedMessages = {
+  messages: Message[];
+  pagination: {
+    currentPage: number;
+    totalPages: number;
+    total: number;
+    hasMore: boolean;
+  };
+};
+
 export interface WhatsAppProvider {
   readonly type: ProviderType;
   readonly supportsTemplates: boolean;
@@ -100,6 +117,7 @@ export interface WhatsAppProvider {
   getConnectionState(instanceName: string): Promise<'open' | 'close' | 'connecting'>;
   findChats(instanceName: string): Promise<Chat[]>;
   findMessages(instanceName: string, chatId: string, limit?: number): Promise<Message[]>;
+  findMessagesPaginated(instanceName: string, chatId: string, options?: FindMessagesOptions): Promise<PaginatedMessages>;
   sendText(instanceName: string, params: SendTextParams): Promise<SendResult>;
   sendMedia(instanceName: string, params: SendMediaParams): Promise<SendResult>;
   sendButtons(instanceName: string, params: SendButtonsParams): Promise<SendResult>;
