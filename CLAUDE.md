@@ -75,6 +75,7 @@ Auto-polling via `src/hooks/use-auto-polling.ts` (10s conversations, 5s messages
 
 ### Key Patterns
 
+- **Chat tags & filtering.** `chatTags` async resolver on config returns colored tag pills per chat. Tags are resolved eagerly for all visible chats. Users can filter the conversation list by clicking tag chips above the list (AND logic). Types: `ChatTag`, `ChatTagsResolver`.
 - **No backend.** Components call `provider.findChats()`, `provider.sendText()`, etc. directly. Requires CORS on the Evolution API (`CORS_ORIGIN=*`). Uses per-instance tokens (not the global API key) so each device can only access its own instance.
 - **Per-instance tokens.** Each device authenticates with its own scoped token from the Evolution API. The token is generated when the instance is created and only grants access to that single instance. Never use the global API key in the browser.
 - **Tailwind v4 prefix.** All classes use `wa:` prefix (e.g. `wa:flex`, `wa:p-4`) to avoid collisions when embedded in host apps. CSS vars are namespaced as `--wa-*`.

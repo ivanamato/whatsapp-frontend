@@ -227,6 +227,25 @@
             ];
           };
 
+          // --- Chat Tags: sync resolver returns colored tag pills per chat ---
+          config.chatTags = (chat, device) => {
+            const tags = [];
+            if (chat.unreadCount && chat.unreadCount > 0) {
+              tags.push({ id: 'unread', label: 'Unread', background: '#ff9800' });
+            }
+            if (chat.contactName) {
+              tags.push({ id: 'saved', label: 'Saved Contact', background: '#2196f3' });
+            }
+            const hash = chat.phoneNumber.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+            if (hash % 3 === 0) {
+              tags.push({ id: 'vip', label: 'VIP', background: '#e91e63' });
+            }
+            if (hash % 4 === 0) {
+              tags.push({ id: 'priority', label: 'Priority', background: '#9c27b0' });
+            }
+            return tags;
+          };
+
           inboxRef.value = WhatsAppInbox.mount(inboxContainer.value, config);
         }
 

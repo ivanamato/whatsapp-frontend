@@ -12,7 +12,7 @@ import { useTranslations } from '@/lib/i18n';
 import { sanitizeUrl } from '@/lib/url-utils';
 import { getAvatarInitials } from '@/lib/avatar-utils';
 import { ChatActionsTrigger, ChatActionsDialog, type Conversation as ChatActionsConversation } from '@/components/chat-actions-menu';
-import type { ChatActionsResolver, DeviceConfig } from '@/lib/providers/types';
+import type { ChatActionsResolver, ChatTagsResolver, ChatTag, DeviceConfig } from '@/lib/providers/types';
 
 type Conversation = {
   id: string;
@@ -51,6 +51,7 @@ type Props = {
   instance?: string;
   provider?: string;
   chatActions?: ChatActionsResolver;
+  chatTags?: ChatTagsResolver;
 };
 
 export type ConversationListRef = {
@@ -59,7 +60,7 @@ export type ConversationListRef = {
 };
 
 export const ConversationList = forwardRef<ConversationListRef, Props>(
-  ({ onSelectConversation, selectedConversationId, isHidden = false, instance, chatActions }, ref) => {
+  ({ onSelectConversation, selectedConversationId, isHidden = false, instance, chatActions, chatTags }, ref) => {
   const provider = useProvider();
   const { viewMode, devices, getProviderForDevice, selectedDevice } = useDeviceContext();
   const t = useTranslations();
@@ -69,6 +70,8 @@ export const ConversationList = forwardRef<ConversationListRef, Props>(
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const [dialogTarget, setDialogTarget] = useState<{ conversation: Conversation; device: DeviceConfig } | null>(null);
+  const [tagMap, setTagMap] = useState<Map<string, ChatTag[]>>(new Map());
+  const [selectedTagIds, setSelectedTagIds] = useState<Set<string>>(new Set());
   const scrollParentRef = useRef<HTMLDivElement>(null);
 
   const doFetch = useCallback(async (): Promise<Conversation[]> => {
@@ -182,6 +185,54 @@ export const ConversationList = forwardRef<ConversationListRef, Props>(
     onPoll: fetchConversations
   });
 
+  // Resolve chat tags eagerly for all conversations
+  useEffect(() => {
+    if (!chatTags || conversations.length === 0) {
+      setTagMap(new Map());
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      const entries: [string, ChatTag[]][] = [];
+      for (const conv of conversations) {
+        const device = conv.deviceId
+          ? devices.find(d => d.id === conv.deviceId)
+          : selectedDevice;
+        if (!device) continue;
+
+        const chat = {
+          id: conv.id,
+          phoneNumber: conv.phoneNumber,
+          contactName: conv.contactName,
+          profilePicUrl: conv.profilePicUrl,
+          lastActiveAt: conv.lastActiveAt,
+          lastMessage: conv.lastMessage ? {
+            content: conv.lastMessage.content,
+            direction: conv.lastMessage.direction as 'inbound' | 'outbound',
+            type: conv.lastMessage.type,
+          } : undefined,
+          unreadCount: conv.unreadCount,
+        };
+
+        try {
+          const tags = await chatTags(chat, device);
+          const key = conv.deviceId ? `${conv.deviceId}::${conv.id}` : conv.id;
+          entries.push([key, tags]);
+        } catch {
+          // skip failed resolutions
+        }
+      }
+
+      if (!cancelled) {
+        setTagMap(new Map(entries));
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [chatTags, conversations, devices, selectedDevice]);
+
   const selectByPhoneNumber = (phoneNumber: string) => {
     const conversation = conversations.find(conv => conv.phoneNumber === phoneNumber);
     if (conversation) {
@@ -206,15 +257,63 @@ export const ConversationList = forwardRef<ConversationListRef, Props>(
     selectByPhoneNumber
   }));
 
+  // Collect unique tags for filter chips
+  const availableTags = useMemo(() => {
+    const seen = new Map<string, ChatTag>();
+    for (const tags of tagMap.values()) {
+      for (const tag of tags) {
+        if (!seen.has(tag.id)) seen.set(tag.id, tag);
+      }
+    }
+    return Array.from(seen.values());
+  }, [tagMap]);
+
+  // Clear stale tag selections when available tags change
+  useEffect(() => {
+    if (selectedTagIds.size === 0) return;
+    const validIds = new Set(availableTags.map(t => t.id));
+    const pruned = new Set([...selectedTagIds].filter(id => validIds.has(id)));
+    if (pruned.size !== selectedTagIds.size) setSelectedTagIds(pruned);
+  }, [availableTags]);
+
+  const toggleTagFilter = useCallback((tagId: string) => {
+    setSelectedTagIds(prev => {
+      const next = new Set(prev);
+      if (next.has(tagId)) next.delete(tagId);
+      else next.add(tagId);
+      return next;
+    });
+  }, []);
+
   const filteredConversations = useMemo(() => {
-    if (!searchQuery) return conversations;
-    const query = searchQuery.toLowerCase();
-    return conversations.filter((conv) =>
-      conv.phoneNumber.toLowerCase().includes(query) ||
-      conv.contactName?.toLowerCase().includes(query) ||
-      conv.deviceLabel?.toLowerCase().includes(query)
-    );
-  }, [conversations, searchQuery]);
+    let result = conversations;
+
+    // Filter by selected tags
+    if (selectedTagIds.size > 0) {
+      result = result.filter(conv => {
+        const key = conv.deviceId ? `${conv.deviceId}::${conv.id}` : conv.id;
+        const tags = tagMap.get(key);
+        if (!tags) return false;
+        const tagIds = new Set(tags.map(t => t.id));
+        for (const id of selectedTagIds) {
+          if (!tagIds.has(id)) return false;
+        }
+        return true;
+      });
+    }
+
+    // Filter by search query
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter((conv) =>
+        conv.phoneNumber.toLowerCase().includes(query) ||
+        conv.contactName?.toLowerCase().includes(query) ||
+        conv.deviceLabel?.toLowerCase().includes(query)
+      );
+    }
+
+    return result;
+  }, [conversations, searchQuery, selectedTagIds, tagMap]);
 
   const rowVirtualizer = useVirtualizer({
     count: filteredConversations.length,
@@ -315,13 +414,44 @@ export const ConversationList = forwardRef<ConversationListRef, Props>(
             />
           </div>
         </div>
+
+        {/* Tag filter chips */}
+        {availableTags.length > 0 && (
+          <div style={{ padding: '0 16px 8px' }} className="wa:flex wa:flex-wrap wa:gap-1.5">
+            {availableTags.map(tag => {
+              const isActive = selectedTagIds.has(tag.id);
+              return (
+                <button
+                  key={tag.id}
+                  type="button"
+                  onClick={() => toggleTagFilter(tag.id)}
+                  style={{
+                    fontSize: 11,
+                    lineHeight: '16px',
+                    padding: '2px 10px',
+                    borderRadius: 12,
+                    background: isActive ? (tag.background || '#00a884') : 'transparent',
+                    color: isActive ? (tag.color || 'white') : '#54656f',
+                    border: isActive ? 'none' : '1px solid #d1d7db',
+                    fontWeight: 500,
+                    whiteSpace: 'nowrap',
+                    cursor: 'pointer',
+                    transition: 'all 150ms',
+                  }}
+                >
+                  {tag.label}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Virtualized conversation list */}
       <div ref={scrollParentRef} className="wa:flex-1 wa:overflow-auto" style={{ contain: 'strict' }}>
         {filteredConversations.length === 0 ? (
           <div className="wa:py-8 wa:text-center wa:text-[#667781] wa:text-[14px]">
-            {searchQuery ? t('conversationList.noConversationsFound') : t('conversationList.noConversationsYet')}
+            {(searchQuery || selectedTagIds.size > 0) ? t('conversationList.noConversationsFound') : t('conversationList.noConversationsYet')}
           </div>
         ) : (
           <div style={{ height: `${rowVirtualizer.getTotalSize()}px`, width: '100%', position: 'relative' }}>
@@ -381,6 +511,30 @@ export const ConversationList = forwardRef<ConversationListRef, Props>(
                           {formatConversationDate(conversation.lastActiveAt, t('conversationList.yesterday'))}
                         </span>
                       </div>
+                      {(() => {
+                        const tags = tagMap.get(compositeKey) || [];
+                        return tags.length > 0 ? (
+                          <div className="wa:flex wa:flex-wrap wa:gap-1 wa:mt-0.5">
+                            {tags.map(tag => (
+                              <span
+                                key={tag.id}
+                                style={{
+                                  fontSize: 10,
+                                  lineHeight: '14px',
+                                  padding: '1px 6px',
+                                  borderRadius: 4,
+                                  background: tag.background || '#00a884',
+                                  color: tag.color || 'white',
+                                  fontWeight: 500,
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
+                                {tag.label}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null;
+                      })()}
                       {viewMode === 'all' && conversation.deviceLabel && (
                         <p className="wa:text-[11px] wa:text-[#667781] wa:truncate wa:leading-[14px]">
                           {conversation.deviceLabel}

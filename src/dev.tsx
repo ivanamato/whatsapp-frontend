@@ -1,6 +1,6 @@
 import { createRoot } from 'react-dom/client';
 import { ProviderProvider } from './lib/provider-context';
-import type { WhatsAppMultiDeviceConfig } from './lib/providers/types';
+import type { WhatsAppMultiDeviceConfig, ChatTagsResolver } from './lib/providers/types';
 import { App } from './App';
 import './app/globals.css';
 
@@ -38,10 +38,30 @@ async function loadConfig(): Promise<WhatsAppMultiDeviceConfig> {
   throw new Error('Missing devices.json');
 }
 
+const devChatTags: ChatTagsResolver = (chat) => {
+  const tags = [];
+  // Assign tags based on chat properties for demo purposes
+  if (chat.unreadCount && chat.unreadCount > 0) {
+    tags.push({ id: 'unread', label: 'Unread', background: '#ff9800', color: 'white' });
+  }
+  if (chat.contactName) {
+    tags.push({ id: 'saved', label: 'Saved Contact', background: '#2196f3' });
+  }
+  // Give ~1/3 of chats a VIP tag based on phone number hash
+  const hash = chat.phoneNumber.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+  if (hash % 3 === 0) {
+    tags.push({ id: 'vip', label: 'VIP', background: '#e91e63' });
+  }
+  if (hash % 4 === 0) {
+    tags.push({ id: 'priority', label: 'Priority', background: '#9c27b0' });
+  }
+  return tags;
+};
+
 loadConfig().then((config) => {
   createRoot(document.getElementById('app')!).render(
-    <ProviderProvider config={config}>
-      <App />
+    <ProviderProvider config={{ ...config, chatTags: devChatTags }}>
+      <App chatTags={devChatTags} />
     </ProviderProvider>
   );
 });

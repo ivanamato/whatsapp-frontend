@@ -10,6 +10,7 @@ Built with [Preact](https://preactjs.com/) + [Tailwind CSS v4](https://tailwindc
 - **Multi-device** — Switch between multiple WhatsApp instances via a device selector
 - **Imperative API** — Programmatic access to chats, messages, devices, and sending from outside React
 - **Custom chat actions** — Configurable action buttons per chat row driven by the host app
+- **Chat tags & filtering** — Colored tag pills on each chat, resolved by the host app, with clickable filter chips to narrow the list
 - **Template messages** — Send WhatsApp-approved templates with header, body, and button parameters
 - **Interactive messages** — Button messages with up to 3 custom actions
 - **Media support** — Send and receive images, videos, audio, and documents
@@ -104,6 +105,7 @@ type WhatsAppMultiDeviceConfig = {
   defaultDeviceId?: string;
   translations?: Partial<Translations>;
   chatActions?: ChatActionsResolver;
+  chatTags?: ChatTagsResolver;
 };
 ```
 
@@ -120,6 +122,7 @@ type WhatsAppMultiDeviceConfig = {
 | `defaultDeviceId` | No | ID of the device to select on mount |
 | `translations` | No | Override UI strings (see [Translations](#translations)) |
 | `chatActions` | No | Async resolver for per-chat action buttons (see [Custom Chat Actions](#custom-chat-actions)) |
+| `chatTags` | No | Async resolver for per-chat colored tag pills with filtering (see [Chat Tags](#chat-tags)) |
 
 ## Imperative API
 
@@ -339,6 +342,68 @@ The resolver and each action's `onClick` receive two arguments:
 - Each resolved action renders as a full-width button in the dialog
 - After clicking an action, the dialog closes automatically
 - The dialog can also be closed with the X button, clicking the backdrop, or pressing Escape
+
+## Chat Tags
+
+Chat tags display colored pills on each conversation row, resolved dynamically by the host app. Users can filter the conversation list by clicking tag chips that appear above the list.
+
+### Configuration
+
+Pass a `chatTags` resolver function in the config:
+
+```js
+const inbox = mount(element, {
+  devices: [/* ... */],
+  chatTags: async (chat, device) => {
+    // Example: fetch tags from your backend
+    const tags = await fetch(`/api/tags?phone=${chat.phoneNumber}`)
+      .then(r => r.json())
+      .catch(() => []);
+
+    return tags;
+    // e.g. [{ id: 'vip', label: 'VIP', background: '#e91e63' }]
+  },
+});
+```
+
+Synchronous resolvers also work:
+
+```js
+chatTags: (chat, device) => {
+  const tags = [];
+  if (chat.unreadCount > 0) {
+    tags.push({ id: 'unread', label: 'Unread', background: '#ff9800' });
+  }
+  if (device.id === 'support') {
+    tags.push({ id: 'support', label: 'Support', background: '#2196f3' });
+  }
+  return tags;
+},
+```
+
+### Types
+
+```ts
+type ChatTagsResolver = (
+  chat: Chat,
+  device: DeviceConfig,
+) => ChatTag[] | Promise<ChatTag[]>;
+
+type ChatTag = {
+  id: string;            // Unique identifier (used for filtering)
+  label: string;         // Text displayed in the pill
+  color?: string;        // Text color (default: 'white')
+  background?: string;   // Background color (default: '#00a884')
+};
+```
+
+### Behavior
+
+- Tags are resolved **eagerly** for all visible conversations (not on-click like `chatActions`)
+- Tags re-resolve automatically when the conversation list updates (new fetch or poll)
+- Each tag renders as a small colored pill below the contact name
+- **Filtering:** All unique tags appear as clickable filter chips above the conversation list. Clicking a chip toggles it on/off. When multiple tags are selected, only conversations matching **all** selected tags are shown (AND logic)
+- If the resolver throws for a chat, that chat simply has no tags
 
 ## Security
 

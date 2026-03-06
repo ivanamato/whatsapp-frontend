@@ -4,7 +4,7 @@ import { MessageView } from '@/components/message-view';
 import { InstanceSelector } from '@/components/instance-selector';
 import { ConnectionStatus } from '@/components/connection-status';
 import { useDeviceContext } from '@/lib/provider-context';
-import type { ChatActionsResolver } from '@/lib/providers/types';
+import type { ChatActionsResolver, ChatTagsResolver } from '@/lib/providers/types';
 
 type Conversation = {
   id: string;
@@ -18,9 +18,10 @@ type Conversation = {
 type AppProps = {
   conversationListRef?: RefObject<ConversationListRef | null>;
   chatActions?: ChatActionsResolver;
+  chatTags?: ChatTagsResolver;
 };
 
-export function App({ conversationListRef: externalRef, chatActions }: AppProps = {}) {
+export function App({ conversationListRef: externalRef, chatActions, chatTags }: AppProps = {}) {
   const { selectedDevice, readonly: isReadonly, viewMode, devices, getProviderForDevice } = useDeviceContext();
   const [selectedConversation, setSelectedConversation] = useState<Conversation>();
   const internalRef = useRef<ConversationListRef>(null);
@@ -129,6 +130,7 @@ export function App({ conversationListRef: externalRef, chatActions }: AppProps 
           instance={selectedDevice?.instanceName}
           provider={provider}
           chatActions={chatActions}
+          chatTags={chatTags}
         />
         <MessageView
           conversationId={selectedConversation?.id}

@@ -24,11 +24,21 @@ export type ChatAction = {
 
 export type ChatActionsResolver = (chat: Chat, device: DeviceConfig) => ChatAction[] | Promise<ChatAction[]>;
 
+export type ChatTag = {
+  id: string;
+  label: string;
+  color?: string;
+  background?: string;
+};
+
+export type ChatTagsResolver = (chat: Chat, device: DeviceConfig) => ChatTag[] | Promise<ChatTag[]>;
+
 export type WhatsAppMultiDeviceConfig = {
   devices: DeviceConfig[];
   defaultDeviceId?: string;
   translations?: Partial<import('../i18n').Translations>;
   chatActions?: ChatActionsResolver;
+  chatTags?: ChatTagsResolver;
 };
 
 export type Chat = {
