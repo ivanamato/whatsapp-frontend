@@ -176,6 +176,7 @@ export function MessageView({ conversationId, phoneNumber, contactName, profileP
     stopRecording,
     cancelRecording,
     sendPastedFile,
+    sendPrebuiltAudio,
   } = thread;
 
   const [pasteModal, setPasteModal] = useState<{ file: File; url: string } | null>(null);
@@ -221,10 +222,14 @@ export function MessageView({ conversationId, phoneNumber, contactName, profileP
     }
   }, [pasteModal]);
 
-  const handlePrebuiltSelect = useCallback((content: string) => {
-    setMessageInput(content);
-    requestAnimationFrame(() => textareaRef.current?.focus());
-  }, [setMessageInput]);
+  const handlePrebuiltSelect = useCallback((msg: import('@/lib/providers/types').PrebuiltMessage) => {
+    if (!msg.type || msg.type === 'text') {
+      setMessageInput(msg.content);
+      requestAnimationFrame(() => textareaRef.current?.focus());
+    } else if (msg.type === 'audio') {
+      sendPrebuiltAudio(msg.content, msg.mimeType ?? 'audio/ogg');
+    }
+  }, [setMessageInput, sendPrebuiltAudio]);
 
   // Auto-resize textarea as content changes
   useEffect(() => {

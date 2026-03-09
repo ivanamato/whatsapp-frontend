@@ -8,8 +8,15 @@ export type PrebuiltMessage = {
   id: string;
   /** Short label shown in the picker list */
   label: string;
-  /** The text that fills the composer when selected */
+  /**
+   * For type='text' (default): the text to fill in the composer.
+   * For type='audio': base64-encoded audio data sent as a PTT voice message.
+   */
   content: string;
+  /** 'text' (default) fills the composer; 'audio' sends immediately as a PTT voice message */
+  type?: 'text' | 'audio';
+  /** For type='audio': MIME type of the audio (e.g. 'audio/ogg'). Defaults to 'audio/ogg' */
+  mimeType?: string;
 };
 
 export type DeviceConfig = {

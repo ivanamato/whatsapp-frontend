@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { ConversationListPage } from './pages/conversation-list.page';
 import { MessageThreadPage } from './pages/message-thread.page';
 
-// Mock device 1 has 3 prebuilt messages (greeting, followup, closing).
+// Mock device 1 has 4 prebuilt messages: 3 text (greeting, followup, closing) + 1 audio (voice-greeting).
 // Mock device 2 has no prebuilt messages.
 // See devices.json for the fixture data.
 
@@ -32,11 +32,12 @@ test.describe('Pre-built messages', () => {
     await thread.openPrebuiltMessages();
     await expect(thread.prebuiltMessagesDialog).toBeVisible();
 
-    // All 3 messages from devices.json mock-device-1 should appear
+    // 3 text + 1 audio from devices.json mock-device-1
     await expect(thread.prebuiltMessageItem('greeting')).toBeVisible();
     await expect(thread.prebuiltMessageItem('followup')).toBeVisible();
     await expect(thread.prebuiltMessageItem('closing')).toBeVisible();
-    await expect(thread.allPrebuiltMessageItems()).toHaveCount(3);
+    await expect(thread.prebuiltMessageItem('voice-greeting')).toBeVisible();
+    await expect(thread.allPrebuiltMessageItems()).toHaveCount(4);
   });
 
   test('selecting a prebuilt message fills the input and closes the dialog', async () => {
@@ -75,5 +76,49 @@ test.describe('Pre-built messages', () => {
     await expect(thread.prebuiltMessageItem('greeting')).toBeVisible();
     await expect(thread.prebuiltMessageItem('followup')).not.toBeVisible();
     await expect(thread.prebuiltMessageItem('closing')).not.toBeVisible();
+  });
+
+  test('audio prebuilt message shows type indicator and "Voice message" subtext', async () => {
+    await thread.openPrebuiltMessages();
+    await expect(thread.prebuiltMessagesDialog).toBeVisible();
+
+    const audioItem = thread.prebuiltMessageItem('voice-greeting');
+    await expect(audioItem).toBeVisible();
+    // data-message-type attribute distinguishes audio from text
+    await expect(audioItem).toHaveAttribute('data-message-type', 'audio');
+    // Shows "Voice message" instead of base64 content
+    await expect(audioItem).toContainText('Voice message');
+    await expect(audioItem).toContainText('Voice Greeting');
+  });
+
+  test('text items have data-message-type="text"', async () => {
+    await thread.openPrebuiltMessages();
+    await expect(thread.prebuiltMessageItem('greeting')).toHaveAttribute('data-message-type', 'text');
+  });
+
+  test('selecting an audio prebuilt message sends an outbound audio bubble without changing the input', async () => {
+    const initialBubbleCount = await thread.outboundBubbles().count();
+
+    await thread.openPrebuiltMessages();
+    await thread.prebuiltMessageItem('voice-greeting').click();
+
+    await expect(thread.prebuiltMessagesDialog).not.toBeVisible();
+    // Input should remain empty — audio is sent directly, not filled into the composer
+    await expect(thread.messageInput).toHaveValue('');
+    // An outbound bubble should appear (optimistic send)
+    await expect(thread.outboundBubbles()).toHaveCount(initialBubbleCount + 1, { timeout: 10000 });
+  });
+
+  test('audio search only matches on label, not on base64 content', async () => {
+    await thread.openPrebuiltMessages();
+    const searchInput = thread.page.locator('[data-testid="prebuilt-messages-search"]');
+
+    // Searching "Voice" should match the audio item by label
+    await searchInput.fill('Voice');
+    await expect(thread.prebuiltMessageItem('voice-greeting')).toBeVisible();
+
+    // Base64 content should not match other searches
+    await searchInput.fill('T2dn');
+    await expect(thread.prebuiltMessageItem('voice-greeting')).not.toBeVisible();
   });
 });

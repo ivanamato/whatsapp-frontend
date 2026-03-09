@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
-import { X, Search } from 'lucide-react';
+import { X, Search, Mic } from 'lucide-react';
 import type { PrebuiltMessage } from '@/lib/providers/types';
 
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   messages: PrebuiltMessage[];
-  onSelect: (content: string) => void;
+  onSelect: (message: PrebuiltMessage) => void;
 };
 
 export function PrebuiltMessagesDialog({ open, onOpenChange, messages, onSelect }: Props) {
@@ -35,12 +35,13 @@ export function PrebuiltMessagesDialog({ open, onOpenChange, messages, onSelect 
     ? messages.filter(
         m =>
           m.label.toLowerCase().includes(search.toLowerCase()) ||
-          m.content.toLowerCase().includes(search.toLowerCase()),
+          // only search text content for text messages (audio content is base64)
+          ((!m.type || m.type === 'text') && m.content.toLowerCase().includes(search.toLowerCase())),
       )
     : messages;
 
   const handleSelect = (msg: PrebuiltMessage) => {
-    onSelect(msg.content);
+    onSelect(msg);
     onOpenChange(false);
   };
 
@@ -107,36 +108,55 @@ export function PrebuiltMessagesDialog({ open, onOpenChange, messages, onSelect 
               No messages found
             </p>
           ) : (
-            filtered.map(msg => (
-              <button
-                key={msg.id}
-                data-testid="prebuilt-message-item"
-                data-message-id={msg.id}
-                onClick={() => handleSelect(msg)}
-                style={{
-                  width: '100%',
-                  textAlign: 'left',
-                  padding: '12px 16px',
-                  borderBottom: '1px solid #f0f2f5',
-                  background: 'none',
-                  border: 'none',
-                  borderBottomWidth: 1,
-                  borderBottomStyle: 'solid' as const,
-                  borderBottomColor: '#f0f2f5',
-                  cursor: 'pointer',
-                  display: 'block',
-                }}
-                onMouseOver={e => { (e.currentTarget as HTMLButtonElement).style.background = '#f5f5f5'; }}
-                onMouseOut={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none'; }}
-              >
-                <p style={{ fontSize: 14, fontWeight: 500, color: '#111b21', margin: 0, lineHeight: 1.4 }}>
-                  {msg.label}
-                </p>
-                <p style={{ fontSize: 13, color: '#667781', margin: '2px 0 0', lineHeight: 1.4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const }}>
-                  {msg.content}
-                </p>
-              </button>
-            ))
+            filtered.map(msg => {
+              const isAudio = msg.type === 'audio';
+              return (
+                <button
+                  key={msg.id}
+                  data-testid="prebuilt-message-item"
+                  data-message-id={msg.id}
+                  data-message-type={msg.type ?? 'text'}
+                  onClick={() => handleSelect(msg)}
+                  style={{
+                    width: '100%',
+                    textAlign: 'left',
+                    padding: '12px 16px',
+                    background: 'none',
+                    border: 'none',
+                    borderBottom: '1px solid #f0f2f5',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                  }}
+                  onMouseOver={e => { (e.currentTarget as HTMLButtonElement).style.background = '#f5f5f5'; }}
+                  onMouseOut={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none'; }}
+                >
+                  {isAudio && (
+                    <div style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: '50%',
+                      background: '#e9fbe5',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                    }}>
+                      <Mic style={{ width: 18, height: 18, color: '#00a884' }} />
+                    </div>
+                  )}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: 14, fontWeight: 500, color: '#111b21', margin: 0, lineHeight: 1.4 }}>
+                      {msg.label}
+                    </p>
+                    <p style={{ fontSize: 13, color: '#667781', margin: '2px 0 0', lineHeight: 1.4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const }}>
+                      {isAudio ? 'Voice message' : msg.content}
+                    </p>
+                  </div>
+                </button>
+              );
+            })
           )}
         </div>
       </div>

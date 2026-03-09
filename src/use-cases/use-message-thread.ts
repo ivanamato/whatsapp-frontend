@@ -410,6 +410,48 @@ export function useMessageThread({
     }
   }, [phoneNumber, instance, sending, provider, fetchInitialMessages, onMessageSent, isNearBottomRef]);
 
+  const sendPrebuiltAudio = useCallback(async (base64: string, mimeType: string) => {
+    if (!phoneNumber || !instance || sending) return;
+    const optimisticId = `optimistic-${Date.now()}`;
+    const optimisticMessage: Message = {
+      id: optimisticId,
+      direction: 'outbound',
+      content: 'Voice message',
+      createdAt: new Date().toISOString(),
+      status: 'pending',
+      phoneNumber,
+      hasMedia: true,
+      messageType: 'audio',
+      caption: null,
+      reactionEmoji: null,
+      reactedToMessageId: null,
+      filename: 'voice.ogg',
+      mimeType,
+    };
+    setMessages(prev => [...prev, optimisticMessage]);
+    isNearBottomRef.current = true;
+    setSending(true);
+    try {
+      await provider.sendMedia(instance, {
+        to: phoneNumber,
+        mediaType: 'audio',
+        media: base64,
+        fileName: 'voice.ogg',
+        mimeType,
+        ptt: true,
+      });
+      await fetchInitialMessages();
+      onMessageSent?.();
+    } catch (error) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.error('Error sending prebuilt audio:', error instanceof Error ? error.message : String(error));
+      }
+      setMessages(prev => prev.map(m => (m.id === optimisticId ? { ...m, status: 'failed' } : m)));
+    } finally {
+      setSending(false);
+    }
+  }, [phoneNumber, instance, sending, provider, fetchInitialMessages, onMessageSent, isNearBottomRef]);
+
   // ─── Voice recording ────────────────────────────────────────────────────
 
   const stopRecordingCleanup = useCallback(() => {
@@ -583,5 +625,6 @@ export function useMessageThread({
     stopRecording,
     cancelRecording,
     sendPastedFile,
+    sendPrebuiltAudio,
   };
 }
