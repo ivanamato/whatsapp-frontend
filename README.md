@@ -538,6 +538,7 @@ type WhatsAppInbox = {
   getActiveDevice(): string | null;
   setActiveDevice(deviceId: string): void;
   selectConversation(phoneNumber: string, prefillMessage?: string, deviceId?: string): void;
+  openChat(phoneNumber: string, options?: { prefillMessage?: string; deviceId?: string }): void;
   unmount(): void;
 };
 ```
@@ -671,6 +672,40 @@ websocket.on('message', (event) => {
   }
 });
 ```
+
+---
+
+#### `openChat(phoneNumber, options?)`
+
+Opens a conversation by phone number. Unlike `selectConversation`, this works even if the number has no existing chat history — it opens a blank message view so the agent can send the first message.
+
+Pass a plain phone number in international format (digits only — no `+`, spaces, or `@`). The Evolution API resolves the WhatsApp JID automatically.
+
+```js
+// Open a blank thread for any phone number
+inbox.openChat('5511999999999');
+
+// Pre-fill the composer
+inbox.openChat('5511999999999', { prefillMessage: 'Hello, how can I help?' });
+
+// Target a specific device
+inbox.openChat('5511999999999', { deviceId: 'support' });
+
+// Full form
+inbox.openChat('5511999999999', {
+  prefillMessage: 'Hi! Following up on your request.',
+  deviceId: 'support',
+});
+```
+
+**Compared to `selectConversation`:**
+
+| | `selectConversation` | `openChat` |
+|---|---|---|
+| Number in chat list | ✅ Opens it | ✅ Opens it |
+| Number NOT in list | ❌ Does nothing | ✅ Opens blank thread |
+
+**Device behaviour:** Same as `selectConversation` — if `deviceId` differs from the active device, the inbox switches to that device first. In merged mode, `deviceId` disambiguates duplicate numbers.
 
 ---
 
