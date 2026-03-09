@@ -332,24 +332,32 @@ mount(el, {
 
 ### `config.devices[].prebuiltMessages` — Pre-built Messages
 
-A per-device library of reusable message templates. When configured, a **book icon** button appears in the composer. Clicking it opens a searchable picker.
+A per-device library of reusable message templates. When configured, a **book icon** button appears in the composer. Clicking it opens a searchable picker with live previews of every item.
 
 ```ts
 type PrebuiltMessage = {
   id: string;
-  label: string;   // Shown in the picker list
-  content: string; // Text to fill, or base64 audio data
-  type?: 'text' | 'audio'; // Default: 'text'
-  mimeType?: string;        // For audio only. Default: 'audio/ogg'
+  label: string;    // Short title shown in the picker
+  content: string;  // Text body, or base64-encoded media data
+  type?: 'text' | 'audio' | 'image' | 'video'; // Default: 'text'
+  mimeType?: string; // Required for media types. Defaults per type (see table below)
 };
 ```
 
-| `type` | Behavior on selection |
-|---|---|
-| `'text'` (default) | Fills the composer input — agent can edit before sending |
-| `'audio'` | Sends immediately as a PTT voice note — composer is untouched |
+#### Types and picker behaviour
 
-**Text templates:**
+| `type` | Picker preview | Send action | Default `mimeType` |
+|---|---|---|---|
+| `'text'` | Content text (truncated) | Fills the composer — agent can edit before sending | — |
+| `'audio'` | Inline `<audio>` player — **fully playable before sending** | Explicit **Send** button (avoids accidental sends while using audio controls) | `audio/ogg` |
+| `'image'` | Thumbnail `<img>` decoded from base64 | Click anywhere on the row | `image/jpeg` |
+| `'video'` | Silent `<video>` preview frame decoded from base64 | Click anywhere on the row | `video/mp4` |
+
+All media types (`audio`, `image`, `video`) send **immediately** without touching the text composer.
+
+---
+
+#### Text templates
 
 ```js
 mount(el, {
@@ -358,45 +366,26 @@ mount(el, {
       id: 'support',
       // ...credentials...
       prebuiltMessages: [
-        {
-          id: 'greeting',
-          label: 'Greeting',
-          content: 'Hello! How can I help you today?',
-        },
-        {
-          id: 'followup',
-          label: 'Follow up',
-          content: "I'm following up on our previous conversation. Please let me know if you have any questions.",
-        },
-        {
-          id: 'closing',
-          label: 'Closing',
-          content: 'Thank you for your time! Have a great day.',
-        },
-        {
-          id: 'wait',
-          label: 'Please wait',
-          content: 'Just a moment while I look into that for you.',
-        },
-        {
-          id: 'escalate',
-          label: 'Escalation notice',
-          content: "I'm going to transfer you to a specialist who can better assist you.",
-        },
+        { id: 'greeting',  label: 'Greeting',          content: 'Hello! How can I help you today?' },
+        { id: 'followup',  label: 'Follow up',          content: "I'm following up on our previous conversation. Please let me know if you have any questions." },
+        { id: 'closing',   label: 'Closing',            content: 'Thank you for your time! Have a great day.' },
+        { id: 'wait',      label: 'Please wait',        content: 'Just a moment while I look into that for you.' },
+        { id: 'escalate',  label: 'Escalation notice',  content: "I'm going to transfer you to a specialist who can better assist you." },
       ],
     },
   ],
 });
 ```
 
-**Audio voice notes:**
+---
 
-Pre-record voice messages and encode them as base64. When selected, they are sent instantly as PTT (push-to-talk) voice notes — no typing required.
+#### Audio voice notes
+
+Pre-record voice messages and encode them as base64. The picker renders a fully playable `<audio>` player so agents can review the recording before hitting **Send**.
 
 ```js
 import { readFileSync } from 'fs';
 
-// Encode an audio file as base64 (run once, store the result in your config)
 const voiceGreeting = readFileSync('voice-greeting.ogg').toString('base64');
 const voiceClosing  = readFileSync('voice-closing.ogg').toString('base64');
 
@@ -410,7 +399,7 @@ mount(el, {
           id: 'voice-greeting',
           label: 'Voice Greeting',
           type: 'audio',
-          mimeType: 'audio/ogg',    // Recommended for WhatsApp
+          mimeType: 'audio/ogg', // Recommended for WhatsApp
           content: voiceGreeting,
         },
         {
@@ -426,27 +415,113 @@ mount(el, {
 });
 ```
 
-**Mixed text + audio (recommended for most teams):**
+Accepted audio formats: `audio/ogg` (recommended for WhatsApp), `audio/webm`, `audio/mp4`, `audio/mpeg`.
+
+---
+
+#### Images
+
+The picker renders the actual image as a thumbnail so agents see exactly what they are about to send.
+
+```js
+import { readFileSync } from 'fs';
+
+const promoBanner = readFileSync('promo-banner.jpg').toString('base64');
+const productShot = readFileSync('product-shot.png').toString('base64');
+
+mount(el, {
+  devices: [
+    {
+      id: 'sales',
+      // ...credentials...
+      prebuiltMessages: [
+        {
+          id: 'promo-banner',
+          label: 'Promo Banner',
+          type: 'image',
+          mimeType: 'image/jpeg',
+          content: promoBanner,
+        },
+        {
+          id: 'product-shot',
+          label: 'Product Shot',
+          type: 'image',
+          mimeType: 'image/png',
+          content: productShot,
+        },
+      ],
+    },
+  ],
+});
+```
+
+Accepted image formats: `image/jpeg`, `image/png`, `image/webp`, `image/gif`.
+
+---
+
+#### Videos
+
+The picker renders a silent preview frame so agents can verify the clip before sending.
+
+```js
+import { readFileSync } from 'fs';
+
+const demoVideo = readFileSync('product-demo.mp4').toString('base64');
+
+mount(el, {
+  devices: [
+    {
+      id: 'sales',
+      // ...credentials...
+      prebuiltMessages: [
+        {
+          id: 'product-demo',
+          label: 'Product Demo',
+          type: 'video',
+          mimeType: 'video/mp4',
+          content: demoVideo,
+        },
+      ],
+    },
+  ],
+});
+```
+
+Accepted video formats: `video/mp4` (recommended), `video/webm`.
+
+---
+
+#### Mixed library (recommended for most teams)
 
 ```js
 prebuiltMessages: [
-  // Text templates — agent reviews before sending
-  { id: 'greeting',  label: 'Greeting',     content: 'Hello! How can I help you today?' },
-  { id: 'followup',  label: 'Follow up',    content: "I'm following up on our previous conversation." },
-  { id: 'closing',   label: 'Closing',      content: 'Thank you for your time! Have a great day.' },
+  // Text — agent reviews and can edit before sending
+  { id: 'greeting', label: 'Greeting', content: 'Hello! How can I help you today?' },
+  { id: 'followup', label: 'Follow up', content: "I'm following up on our previous conversation." },
+  { id: 'closing',  label: 'Closing',  content: 'Thank you for your time! Have a great day.' },
 
-  // Audio voice notes — sent immediately on selection
-  { id: 'voice-hi',  label: 'Voice: Hi!',   type: 'audio', mimeType: 'audio/ogg', content: '<base64>' },
-  { id: 'voice-bye', label: 'Voice: Bye!',  type: 'audio', mimeType: 'audio/ogg', content: '<base64>' },
+  // Audio — agent listens via the inline player, then clicks Send
+  { id: 'voice-hi',  label: 'Voice: Hi!',  type: 'audio', mimeType: 'audio/ogg', content: '<base64>' },
+  { id: 'voice-bye', label: 'Voice: Bye!', type: 'audio', mimeType: 'audio/ogg', content: '<base64>' },
+
+  // Image — thumbnail preview, click row to send
+  { id: 'promo', label: 'Promo Banner', type: 'image', mimeType: 'image/jpeg', content: '<base64>' },
+
+  // Video — silent frame preview, click row to send
+  { id: 'demo', label: 'Product Demo', type: 'video', mimeType: 'video/mp4', content: '<base64>' },
 ],
 ```
 
-**Picker behavior:**
-- Search filters on `label` for all items, and on `content` for text items (base64 audio content is never searched)
-- Dismiss with Escape, the X button, or clicking the backdrop
-- Different devices can have completely different message libraries
+---
 
-Accepted audio formats: `audio/ogg` (recommended), `audio/webm`, `audio/mp4`, `audio/mpeg`.
+#### Picker behaviour
+
+- The book icon button only appears when `prebuiltMessages` is configured and non-empty for the active device
+- **Search** — filters on `label` for all types; also matches `content` for text items. Base64 media content is never searched
+- **Audio items** have a dedicated **Send** button to prevent audio control interactions (play/seek/pause) from accidentally triggering a send
+- **Image and video items** — click anywhere on the row to send
+- Dismiss with Escape, the X button, or clicking the backdrop
+- Each device can have a completely different message library
 
 ---
 
