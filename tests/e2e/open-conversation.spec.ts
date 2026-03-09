@@ -10,7 +10,10 @@ import { MessageThreadPage } from './pages/message-thread.page';
 //
 // The inbox instance is exposed on window.__whatsappInbox in dev.tsx.
 
-type WA = { selectConversation(phone: string, prefill?: string, deviceId?: string): void };
+type WA = {
+  selectConversation(phone: string, prefill?: string, deviceId?: string): void;
+  openChat(phone: string, options?: { prefillMessage?: string; deviceId?: string }): void;
+};
 type WW = Window & { __whatsappInbox: WA };
 type Args = { phone: string; prefill?: string; deviceId?: string };
 
@@ -18,6 +21,9 @@ type Args = { phone: string; prefill?: string; deviceId?: string };
 // Pass args as the second parameter and destructure inside the fn.
 const evalSelect = ({ phone, prefill, deviceId }: Args) =>
   (window as unknown as WW).__whatsappInbox.selectConversation(phone, prefill, deviceId);
+
+const evalOpenChat = ({ phone, prefill, deviceId }: Args) =>
+  (window as unknown as WW).__whatsappInbox.openChat(phone, { prefillMessage: prefill, deviceId });
 
 test.describe('selectConversation API', () => {
   let chatList: ConversationListPage;
@@ -135,5 +141,58 @@ test.describe('selectConversation API', () => {
     await page.evaluate(evalSelect, { phone: '556992924255', prefill: 'Merged prefill', deviceId: 'mock-device-1' });
     await thread.waitForLoaded();
     await expect(thread.messageInput).toHaveValue('Merged prefill');
+  });
+});
+
+// ── openChat API ──────────────────────────────────────────────────────────────
+
+test.describe('openChat API', () => {
+  let chatList: ConversationListPage;
+  let thread: MessageThreadPage;
+
+  test.beforeEach(async ({ page }) => {
+    chatList = new ConversationListPage(page);
+    thread = new MessageThreadPage(page);
+    await page.goto('/');
+    await chatList.waitForLoaded();
+  });
+
+  test('opens an existing chat if the number is already in the list', async ({ page }) => {
+    // Ana Beatriz is a known MOCK1 contact
+    await page.evaluate(evalOpenChat, { phone: '556992924255' });
+    await thread.waitForLoaded();
+    await expect(thread.root).toBeVisible();
+  });
+
+  test('opens a blank thread for a phone number not in the chat list', async ({ page }) => {
+    // This number does not exist in any fixture
+    await page.evaluate(evalOpenChat, { phone: '19998887777' });
+    // Wait for the message-thread element to appear (loading completes with empty list)
+    await thread.root.waitFor({ state: 'visible', timeout: 10000 });
+    // No message bubbles — it's a new conversation
+    await expect(thread.allBubbles()).toHaveCount(0);
+    // Composer is ready
+    await expect(thread.messageInput).toBeVisible();
+  });
+
+  test('pre-fills the composer when opening a new chat', async ({ page }) => {
+    await page.evaluate(evalOpenChat, { phone: '19998887777', prefill: 'Hi there, first message!' });
+    await thread.root.waitFor({ state: 'visible', timeout: 10000 });
+    await expect(thread.messageInput).toHaveValue('Hi there, first message!');
+  });
+
+  test('opens a new chat on a specific device via deviceId', async ({ page }) => {
+    // Sarah Johnson lives on mock-device-2; app starts on device 1
+    await page.evaluate(evalOpenChat, { phone: '15551234567', deviceId: 'mock-device-2' });
+    await thread.waitForLoaded();
+    await expect(thread.root).toBeVisible();
+  });
+
+  test('opens a blank thread on a specific device when phone is unknown there', async ({ page }) => {
+    // 19998887777 is unknown on device 2 as well
+    await page.evaluate(evalOpenChat, { phone: '19998887777', deviceId: 'mock-device-2' });
+    await thread.root.waitFor({ state: 'visible', timeout: 10000 });
+    await expect(thread.allBubbles()).toHaveCount(0);
+    await expect(thread.messageInput).toBeVisible();
   });
 });

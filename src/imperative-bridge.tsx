@@ -13,6 +13,7 @@ export type ImperativeApi = {
   getActiveDevice: () => string | null;
   setActiveDevice: (deviceId: string) => void;
   selectConversation: (phoneNumber: string, prefillMessage?: string, deviceId?: string) => void;
+  openChat: (phoneNumber: string, options?: { prefillMessage?: string; deviceId?: string }) => void;
 };
 
 type Props = {
@@ -29,6 +30,7 @@ export const ImperativeApiBridge = forwardRef<ImperativeApi, Props>(
     const [prefillToken, setPrefillToken] = useState<{ id: number; message: string } | null>(null);
     const prefillCounterRef = useRef(0);
     const [pendingPhone, setPendingPhone] = useState<string | null>(null);
+    const [pendingOpenPhone, setPendingOpenPhone] = useState<string | null>(null);
 
     // Apply a pending conversation selection after a device switch re-render.
     // Always refresh first so we search in the new device's chats, not stale data.
@@ -43,6 +45,14 @@ export const ImperativeApiBridge = forwardRef<ImperativeApi, Props>(
         if (found) ref.select(found);
       });
     }, [selectedDevice?.id, pendingPhone]);
+
+    // Apply a pending openChat after a device switch re-render.
+    useEffect(() => {
+      if (!pendingOpenPhone) return;
+      const phone = pendingOpenPhone;
+      setPendingOpenPhone(null);
+      conversationListRef.current?.openChat(phone);
+    }, [selectedDevice?.id, pendingOpenPhone]);
 
     useImperativeHandle(ref, () => ({
       getChats: async () => {
@@ -88,6 +98,22 @@ export const ImperativeApiBridge = forwardRef<ImperativeApi, Props>(
           setPendingPhone(phoneNumber);
         } else {
           conversationListRef.current?.selectByPhoneNumber(phoneNumber);
+        }
+      },
+      openChat: (phoneNumber: string, options?: { prefillMessage?: string; deviceId?: string }) => {
+        const { prefillMessage, deviceId } = options ?? {};
+        if (prefillMessage !== undefined) {
+          prefillCounterRef.current += 1;
+          setPrefillToken({ id: prefillCounterRef.current, message: prefillMessage });
+        }
+        if (viewMode === 'all') {
+          conversationListRef.current?.openChat(phoneNumber, deviceId);
+        } else if (deviceId && deviceId !== selectedDevice?.id) {
+          const device = devices.find(d => d.id === deviceId);
+          if (device) selectDevice(deviceId);
+          setPendingOpenPhone(phoneNumber);
+        } else {
+          conversationListRef.current?.openChat(phoneNumber);
         }
       },
     }), [provider, selectedDevice, selectDevice, devices, getProviderForDevice, viewMode]);

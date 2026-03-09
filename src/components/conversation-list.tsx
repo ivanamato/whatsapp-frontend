@@ -44,6 +44,7 @@ export type ConversationListRef = {
   refresh: () => Promise<Conversation[]>;
   selectByPhoneNumber: (phoneNumber: string, deviceId?: string) => Promise<void>;
   select: (conversation: Conversation) => void;
+  openChat: (phoneNumber: string, deviceId?: string) => Promise<void>;
 };
 
 export const ConversationList = forwardRef<ConversationListRef, Props>(
@@ -83,6 +84,25 @@ export const ConversationList = forwardRef<ConversationListRef, Props>(
       const fresh = await refresh();
       const found = fresh.find(match);
       if (found) onSelectConversation(found);
+    },
+    openChat: async (phoneNumber: string, deviceId?: string) => {
+      const match = (c: Conversation) =>
+        c.phoneNumber === phoneNumber && (!deviceId || c.deviceId === deviceId);
+      // Try existing chats first
+      const immediate = conversations.find(match);
+      if (immediate) { onSelectConversation(immediate); return; }
+      const fresh = await refresh();
+      const found = fresh.find(match);
+      if (found) { onSelectConversation(found); return; }
+      // Not found — open a blank thread for this phone number
+      const targetDeviceId = deviceId ?? selectedDevice?.id;
+      const targetDevice = devices.find(d => d.id === targetDeviceId) ?? selectedDevice;
+      onSelectConversation({
+        id: phoneNumber,
+        phoneNumber,
+        deviceId: targetDevice?.id,
+        deviceLabel: targetDevice?.label,
+      });
     },
   }));
 

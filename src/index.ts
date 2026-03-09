@@ -26,6 +26,11 @@ export type WhatsAppInbox = {
   getActiveDevice: () => string | null;
   setActiveDevice: (deviceId: string) => void;
   selectConversation: (phoneNumber: string, prefillMessage?: string, deviceId?: string) => void;
+  /**
+   * Open a conversation by phone number. If no existing chat is found, opens a blank
+   * message view so you can send the first message — unlike selectConversation which does nothing.
+   */
+  openChat: (phoneNumber: string, options?: { prefillMessage?: string; deviceId?: string }) => void;
   unmount: () => void;
 };
 
@@ -64,6 +69,7 @@ export function mount(element: HTMLElement, config: WhatsAppMultiDeviceConfig): 
     getActiveDevice: () => getBridge().getActiveDevice(),
     setActiveDevice: (deviceId) => getBridge().setActiveDevice(deviceId),
     selectConversation: (phoneNumber, prefillMessage?, deviceId?) => getBridge().selectConversation(phoneNumber, prefillMessage, deviceId),
+    openChat: (phoneNumber, options?) => getBridge().openChat(phoneNumber, options),
     unmount: () => {
       root.unmount();
       roots.delete(element);
