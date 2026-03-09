@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { X, Search, Mic, ImageIcon, Video } from 'lucide-react';
+import { X, Search, Send } from 'lucide-react';
 import type { PrebuiltMessage } from '@/lib/providers/types';
 
 type Props = {
@@ -9,19 +9,27 @@ type Props = {
   onSelect: (message: PrebuiltMessage) => void;
 };
 
-type MediaMeta = {
-  icon: typeof Mic;
-  bg: string;
-  color: string;
-  subtext: string;
-};
-
-function getMediaMeta(type: PrebuiltMessage['type']): MediaMeta | null {
-  if (type === 'audio') return { icon: Mic,       bg: '#e9fbe5', color: '#00a884', subtext: 'Voice message' };
-  if (type === 'image') return { icon: ImageIcon, bg: '#e3f2fd', color: '#1976d2', subtext: 'Image' };
-  if (type === 'video') return { icon: Video,     bg: '#f3e5f5', color: '#7b1fa2', subtext: 'Video' };
-  return null;
+function dataUrl(msg: PrebuiltMessage): string {
+  const mime = msg.mimeType ?? (
+    msg.type === 'audio' ? 'audio/ogg' :
+    msg.type === 'image' ? 'image/jpeg' :
+    msg.type === 'video' ? 'video/mp4' : ''
+  );
+  return `data:${mime};base64,${msg.content}`;
 }
+
+const ROW_STYLE: React.CSSProperties = {
+  width: '100%',
+  textAlign: 'left',
+  padding: '12px 16px',
+  background: 'none',
+  border: 'none',
+  borderBottom: '1px solid #f0f2f5',
+  cursor: 'pointer',
+  display: 'flex',
+  alignItems: 'center',
+  gap: 12,
+};
 
 export function PrebuiltMessagesDialog({ open, onOpenChange, messages, onSelect }: Props) {
   const [search, setSearch] = useState('');
@@ -45,14 +53,11 @@ export function PrebuiltMessagesDialog({ open, onOpenChange, messages, onSelect 
 
   if (!open) return null;
 
-  const isTextType = (m: PrebuiltMessage) => !m.type || m.type === 'text';
-
   const filtered = search.trim()
     ? messages.filter(
         m =>
           m.label.toLowerCase().includes(search.toLowerCase()) ||
-          // only search content for text messages — base64 media content is never searched
-          (isTextType(m) && m.content.toLowerCase().includes(search.toLowerCase())),
+          (!m.type || m.type === 'text') && m.content.toLowerCase().includes(search.toLowerCase()),
       )
     : messages;
 
@@ -125,49 +130,145 @@ export function PrebuiltMessagesDialog({ open, onOpenChange, messages, onSelect 
             </p>
           ) : (
             filtered.map(msg => {
-              const meta = getMediaMeta(msg.type);
+              const type = msg.type ?? 'text';
+
+              // ── Audio: non-button row with inline player + explicit Send button
+              if (type === 'audio') {
+                return (
+                  <div
+                    key={msg.id}
+                    data-testid="prebuilt-message-item"
+                    data-message-id={msg.id}
+                    data-message-type="audio"
+                    style={{ padding: '12px 16px', borderBottom: '1px solid #f0f2f5' }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <div style={{ minWidth: 0 }}>
+                        <p style={{ fontSize: 14, fontWeight: 500, color: '#111b21', margin: 0, lineHeight: 1.4 }}>
+                          {msg.label}
+                        </p>
+                        <p style={{ fontSize: 13, color: '#667781', margin: 0, lineHeight: 1.4 }}>
+                          Voice message
+                        </p>
+                      </div>
+                      <button
+                        data-testid="prebuilt-audio-send"
+                        onClick={() => handleSelect(msg)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          background: '#00a884',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: 20,
+                          padding: '6px 14px',
+                          fontSize: 13,
+                          fontWeight: 500,
+                          cursor: 'pointer',
+                          flexShrink: 0,
+                          marginLeft: 12,
+                        }}
+                      >
+                        <Send style={{ width: 14, height: 14 }} />
+                        Send
+                      </button>
+                    </div>
+                    {/* Audio player — stop propagation so controls don't bubble */}
+                    <div onClick={e => e.stopPropagation()}>
+                      <audio
+                        data-testid="prebuilt-audio-player"
+                        src={dataUrl(msg)}
+                        controls
+                        preload="metadata"
+                        style={{ width: '100%', height: 32 }}
+                      />
+                    </div>
+                  </div>
+                );
+              }
+
+              // ── Image: thumbnail replaces icon
+              if (type === 'image') {
+                return (
+                  <button
+                    key={msg.id}
+                    data-testid="prebuilt-message-item"
+                    data-message-id={msg.id}
+                    data-message-type="image"
+                    onClick={() => handleSelect(msg)}
+                    style={ROW_STYLE}
+                    onMouseOver={e => { (e.currentTarget as HTMLButtonElement).style.background = '#f5f5f5'; }}
+                    onMouseOut={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none'; }}
+                  >
+                    <img
+                      data-testid="prebuilt-image-preview"
+                      src={dataUrl(msg)}
+                      alt={msg.label}
+                      style={{ width: 52, height: 52, objectFit: 'cover', borderRadius: 6, flexShrink: 0 }}
+                    />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontSize: 14, fontWeight: 500, color: '#111b21', margin: 0, lineHeight: 1.4 }}>
+                        {msg.label}
+                      </p>
+                      <p style={{ fontSize: 13, color: '#667781', margin: '2px 0 0', lineHeight: 1.4 }}>
+                        Image
+                      </p>
+                    </div>
+                  </button>
+                );
+              }
+
+              // ── Video: thumbnail replaces icon
+              if (type === 'video') {
+                return (
+                  <button
+                    key={msg.id}
+                    data-testid="prebuilt-message-item"
+                    data-message-id={msg.id}
+                    data-message-type="video"
+                    onClick={() => handleSelect(msg)}
+                    style={ROW_STYLE}
+                    onMouseOver={e => { (e.currentTarget as HTMLButtonElement).style.background = '#f5f5f5'; }}
+                    onMouseOut={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none'; }}
+                  >
+                    <video
+                      data-testid="prebuilt-video-preview"
+                      src={dataUrl(msg)}
+                      muted
+                      preload="metadata"
+                      style={{ width: 72, height: 52, objectFit: 'cover', borderRadius: 6, flexShrink: 0, display: 'block' }}
+                    />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontSize: 14, fontWeight: 500, color: '#111b21', margin: 0, lineHeight: 1.4 }}>
+                        {msg.label}
+                      </p>
+                      <p style={{ fontSize: 13, color: '#667781', margin: '2px 0 0', lineHeight: 1.4 }}>
+                        Video
+                      </p>
+                    </div>
+                  </button>
+                );
+              }
+
+              // ── Text: content preview
               return (
                 <button
                   key={msg.id}
                   data-testid="prebuilt-message-item"
                   data-message-id={msg.id}
-                  data-message-type={msg.type ?? 'text'}
+                  data-message-type="text"
                   onClick={() => handleSelect(msg)}
-                  style={{
-                    width: '100%',
-                    textAlign: 'left',
-                    padding: '12px 16px',
-                    background: 'none',
-                    border: 'none',
-                    borderBottom: '1px solid #f0f2f5',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 12,
-                  }}
+                  style={ROW_STYLE}
                   onMouseOver={e => { (e.currentTarget as HTMLButtonElement).style.background = '#f5f5f5'; }}
                   onMouseOut={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none'; }}
                 >
-                  {meta && (
-                    <div style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: '50%',
-                      background: meta.bg,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0,
-                    }}>
-                      <meta.icon style={{ width: 18, height: 18, color: meta.color }} />
-                    </div>
-                  )}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{ fontSize: 14, fontWeight: 500, color: '#111b21', margin: 0, lineHeight: 1.4 }}>
                       {msg.label}
                     </p>
                     <p style={{ fontSize: 13, color: '#667781', margin: '2px 0 0', lineHeight: 1.4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const }}>
-                      {meta ? meta.subtext : msg.content}
+                      {msg.content}
                     </p>
                   </div>
                 </button>

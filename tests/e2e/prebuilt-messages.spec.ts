@@ -102,16 +102,32 @@ test.describe('Pre-built messages', () => {
     await expect(thread.prebuiltMessageItem('greeting')).toHaveAttribute('data-message-type', 'text');
   });
 
+  test('audio item shows a playable audio player', async () => {
+    await thread.openPrebuiltMessages();
+    const player = thread.page.locator('[data-testid="prebuilt-audio-player"]');
+    await expect(player).toBeVisible();
+    // Must have controls attribute so the user can play before sending
+    await expect(player).toHaveAttribute('controls', '');
+    // src must be a data URL with the audio content
+    const src = await player.getAttribute('src');
+    expect(src).toMatch(/^data:audio\//);
+  });
+
+  test('audio item has an explicit Send button', async () => {
+    await thread.openPrebuiltMessages();
+    const sendBtn = thread.page.locator('[data-testid="prebuilt-audio-send"]');
+    await expect(sendBtn).toBeVisible();
+  });
+
   test('selecting an audio prebuilt message sends an outbound audio bubble without changing the input', async () => {
     const initialBubbleCount = await thread.outboundBubbles().count();
 
     await thread.openPrebuiltMessages();
-    await thread.prebuiltMessageItem('voice-greeting').click();
+    // Click the explicit Send button (not the row — the audio player captures row clicks)
+    await thread.page.locator('[data-testid="prebuilt-audio-send"]').click();
 
     await expect(thread.prebuiltMessagesDialog).not.toBeVisible();
-    // Input should remain empty — audio is sent directly, not filled into the composer
     await expect(thread.messageInput).toHaveValue('');
-    // An outbound bubble should appear (optimistic send)
     await expect(thread.outboundBubbles()).toHaveCount(initialBubbleCount + 1, { timeout: 10000 });
   });
 
@@ -128,24 +144,33 @@ test.describe('Pre-built messages', () => {
     await expect(thread.prebuiltMessageItem('voice-greeting')).not.toBeVisible();
   });
 
-  test('image prebuilt message shows type indicator and "Image" subtext', async () => {
+  test('image prebuilt message shows a thumbnail preview', async () => {
     await thread.openPrebuiltMessages();
 
     const imageItem = thread.prebuiltMessageItem('promo-image');
     await expect(imageItem).toBeVisible();
     await expect(imageItem).toHaveAttribute('data-message-type', 'image');
-    await expect(imageItem).toContainText('Image');
     await expect(imageItem).toContainText('Promo Image');
+
+    // Thumbnail must render with a data URL src
+    const preview = imageItem.locator('[data-testid="prebuilt-image-preview"]');
+    await expect(preview).toBeVisible();
+    const src = await preview.getAttribute('src');
+    expect(src).toMatch(/^data:image\//);
   });
 
-  test('video prebuilt message shows type indicator and "Video" subtext', async () => {
+  test('video prebuilt message shows a video thumbnail', async () => {
     await thread.openPrebuiltMessages();
 
     const videoItem = thread.prebuiltMessageItem('product-video');
     await expect(videoItem).toBeVisible();
     await expect(videoItem).toHaveAttribute('data-message-type', 'video');
-    await expect(videoItem).toContainText('Video');
     await expect(videoItem).toContainText('Product Video');
+
+    const preview = videoItem.locator('[data-testid="prebuilt-video-preview"]');
+    await expect(preview).toBeVisible();
+    const src = await preview.getAttribute('src');
+    expect(src).toMatch(/^data:video\//);
   });
 
   test('selecting an image prebuilt message sends an outbound bubble without changing the input', async () => {
