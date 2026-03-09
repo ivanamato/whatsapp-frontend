@@ -9,11 +9,15 @@ Built with [Preact](https://preactjs.com/) + [Tailwind CSS v4](https://tailwindc
 - **Real-time messaging** — Auto-polling keeps conversations and messages updated
 - **Multi-device** — Switch between multiple WhatsApp instances via a device selector
 - **Imperative API** — Programmatic access to chats, messages, devices, and sending from outside React
+- **Conversation pre-selection & pre-fill** — Open a specific conversation programmatically and optionally pre-fill the composer with a message — ideal for CRM "reply to customer" flows
+- **Pre-built messages** — Per-device library of reusable text templates and audio voice notes, selectable from a searchable picker in the composer
 - **Custom chat actions** — Configurable action buttons per chat row driven by the host app
 - **Chat tags & filtering** — Colored tag pills on each chat, resolved by the host app, with clickable filter chips to narrow the list
 - **Template messages** — Send WhatsApp-approved templates with header, body, and button parameters
 - **Interactive messages** — Button messages with up to 3 custom actions
 - **Media support** — Send and receive images, videos, audio, and documents
+- **Voice recording** — Record and send PTT voice messages directly from the composer
+- **Image paste** — Paste an image from the clipboard to send it with an optional caption
 - **Message forwarding** — Forward messages between conversations
 - **Context menu** — Right-click actions (delete, forward) on messages
 - **Read-only mode** — View-only access per device
@@ -98,6 +102,7 @@ type DeviceConfig = {
   instanceName: string;
   providerType?: 'evolution' | 'cloud';
   readonly?: boolean;
+  prebuiltMessages?: PrebuiltMessage[];
 };
 
 type WhatsAppMultiDeviceConfig = {
@@ -119,6 +124,7 @@ type WhatsAppMultiDeviceConfig = {
 | `devices[].label` | No | Display name in the device selector |
 | `devices[].providerType` | No | `'evolution'` (default) or `'cloud'` |
 | `devices[].readonly` | No | If `true`, disables sending messages |
+| `devices[].prebuiltMessages` | No | Per-device list of reusable text templates and audio voice notes (see [Pre-built Messages](#pre-built-messages)) |
 | `defaultDeviceId` | No | ID of the device to select on mount |
 | `translations` | No | Override UI strings (see [Translations](#translations)) |
 | `chatActions` | No | Async resolver for per-chat action buttons (see [Custom Chat Actions](#custom-chat-actions)) |
@@ -182,26 +188,7 @@ if (state === 'open') {
 
 ### Example: Opening a conversation with a pre-filled message
 
-`selectConversation` accepts an optional pre-fill message and an optional device ID. This is the primary integration point for CRM-style "reply to customer" flows.
-
-```js
-// Open a conversation (same device, empty composer)
-inbox.selectConversation('5511999999999');
-
-// Open with a pre-filled message — the send button is immediately active
-inbox.selectConversation('5511999999999', 'Hello, following up on your request!');
-
-// Open on a specific device — switches device if needed, then loads the conversation
-inbox.selectConversation('5511999999999', undefined, 'device-2');
-
-// Full form: specific device + pre-filled message
-inbox.selectConversation('5511999999999', 'Hello!', 'device-2');
-```
-
-**Device selection behaviour:**
-- **Single mode** (`viewMode: 'single'`): if `deviceId` differs from the active device, the inbox switches to that device first, fetches its chat list, then selects the conversation. If the phone number is not found on the specified device, nothing is selected.
-- **Merged mode** (`viewMode: 'all'`): all devices are already visible in one list — no device switch occurs. `deviceId` is used only to disambiguate if the same number appears on multiple devices.
-- Omitting `deviceId` always searches the currently visible chat list.
+See [Conversation Pre-selection & Pre-fill](#conversation-pre-selection--pre-fill) for the full reference and examples.
 
 ### Types
 
@@ -421,6 +408,146 @@ type ChatTag = {
 - Each tag renders as a small colored pill below the contact name
 - **Filtering:** All unique tags appear as clickable filter chips above the conversation list. Clicking a chip toggles it on/off. When multiple tags are selected, only conversations matching **all** selected tags are shown (AND logic)
 - If the resolver throws for a chat, that chat simply has no tags
+
+## Pre-built Messages
+
+Pre-built messages let you define a library of reusable content per device. A **book icon** button appears in the composer when `prebuiltMessages` is configured. Clicking it opens a searchable picker where the agent selects a message to use.
+
+Two types are supported:
+
+| `type` | Behavior |
+|---|---|
+| `'text'` (default) | Fills the composer text input — the agent can review and edit before sending |
+| `'audio'` | Sends immediately as a PTT (push-to-talk) voice note — no text input involved |
+
+### Configuration
+
+```js
+const inbox = mount(element, {
+  devices: [
+    {
+      id: 'support',
+      // ...credentials...
+      prebuiltMessages: [
+        // Text template — fills the composer
+        {
+          id: 'greeting',
+          label: 'Greeting',
+          content: 'Hello! How can I help you today?',
+        },
+        {
+          id: 'followup',
+          label: 'Follow up',
+          content: "I'm following up on our previous conversation. Please let me know if you have any questions.",
+        },
+        {
+          id: 'closing',
+          label: 'Closing',
+          content: 'Thank you for your time! Have a great day.',
+        },
+
+        // Audio voice note — sent immediately as PTT
+        {
+          id: 'voice-greeting',
+          label: 'Voice Greeting',
+          type: 'audio',
+          mimeType: 'audio/ogg',
+          content: '<base64-encoded audio data>',
+        },
+      ],
+    },
+  ],
+});
+```
+
+### Types
+
+```ts
+type PrebuiltMessage = {
+  id: string;
+  /** Short label shown in the picker */
+  label: string;
+  /**
+   * For type='text': the text to fill in the composer.
+   * For type='audio': base64-encoded audio data sent as a PTT voice note.
+   */
+  content: string;
+  /** 'text' (default) fills the composer; 'audio' sends immediately as PTT */
+  type?: 'text' | 'audio';
+  /** For type='audio': MIME type of the audio. Defaults to 'audio/ogg' */
+  mimeType?: string;
+};
+```
+
+### Picker behavior
+
+- The picker button only appears when `prebuiltMessages` is configured and non-empty for the active device
+- Selecting a **text** message fills the composer — the agent can still edit it before sending
+- Selecting an **audio** message sends it immediately as a PTT voice note without touching the text composer
+- The picker has a live search bar that filters on `label` (and `content` for text messages — base64 audio content is never searched)
+- The picker can be dismissed with Escape, the X button, or clicking the backdrop
+
+### Generating audio content
+
+Use any tool that can export audio as base64. For example, in Node.js:
+
+```js
+import { readFileSync } from 'fs';
+
+const base64 = readFileSync('voice-greeting.ogg').toString('base64');
+// Use this string as the `content` field for an audio prebuilt message
+```
+
+Accepted formats: `audio/ogg` (recommended for WhatsApp), `audio/webm`, `audio/mp4`, `audio/mpeg`.
+
+---
+
+## Conversation Pre-selection & Pre-fill
+
+`selectConversation` is the primary integration point for CRM and support tools. It lets you open a specific conversation from outside the inbox — and optionally pre-fill the composer with a draft message so the agent can send it with a single click.
+
+### Opening a conversation
+
+```js
+// Open by phone number (active device, empty composer)
+inbox.selectConversation('5511999999999');
+
+// Pre-fill the composer — the send button activates immediately
+inbox.selectConversation('5511999999999', 'Hello, following up on your request!');
+
+// Target a specific device — switches device if needed, then loads the conversation
+inbox.selectConversation('5511999999999', undefined, 'device-2');
+
+// Full form: specific device + pre-filled message
+inbox.selectConversation('5511999999999', 'Hello!', 'device-2');
+```
+
+### Behavior
+
+- If `deviceId` is provided and differs from the active device, the inbox switches to that device first, then fetches the updated chat list, then selects the conversation
+- The pre-fill message is always written into the composer exactly as provided — the agent reviews and optionally edits it before sending
+- Calling `selectConversation` multiple times with different messages correctly replaces the previous pre-fill (each call increments an internal token counter so stale pre-fills are never applied)
+- If `deviceId` is omitted, the currently visible chat list is searched
+- If the phone number is not found in the chat list, nothing is selected
+
+**Single-device mode** (`viewMode: 'single'`): switches to the target device, waits for its chat list to load, then selects the conversation.
+
+**Merged mode** (`viewMode: 'all'`): all devices are already visible in one list — no device switch occurs. `deviceId` is used only to disambiguate when the same phone number appears on multiple devices.
+
+### Example: CRM "Reply to customer" button
+
+```js
+// In your CRM, when an agent clicks "Reply":
+document.getElementById('reply-btn').addEventListener('click', () => {
+  inbox.selectConversation(
+    customer.phoneNumber,
+    `Hi ${customer.firstName}, thanks for reaching out!`,
+    customer.assignedDevice,
+  );
+});
+```
+
+---
 
 ## Security
 
