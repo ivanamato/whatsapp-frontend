@@ -648,7 +648,7 @@ export class EvolutionProvider implements WhatsAppProvider {
     }
   }
 
-  private convertToMessages(allMessages: EvolutionMessage[], phoneNumber: string): Message[] {
+  private convertToMessages(allMessages: EvolutionMessage[], phoneNumber: string, contactNameByJid?: Map<string, string>): Message[] {
     // First pass: collect IDs of messages that were revoked (deleted for everyone)
     const revokedIds = new Set<string>();
     for (const msg of allMessages) {
@@ -685,7 +685,18 @@ export class EvolutionProvider implements WhatsAppProvider {
           metadata: (!isDeleted && extracted.hasMedia)
             ? { mediaId: msg.key.id }
             : {},
-          senderName: msg.key.fromMe ? undefined : (msg.pushName || undefined),
+          senderName: (() => {
+            if (msg.key.fromMe) return undefined;
+            if (msg.pushName) return msg.pushName;
+            // For group messages, fall back to contact lookup by participant JID
+            if (msg.key.participant) {
+              const participantPhone = stripJid(msg.key.participant);
+              return contactNameByJid?.get(msg.key.participant)
+                || contactNameByJid?.get(`${participantPhone}@s.whatsapp.net`)
+                || participantPhone;
+            }
+            return undefined;
+          })(),
         };
       });
   }
@@ -752,7 +763,21 @@ export class EvolutionProvider implements WhatsAppProvider {
     }
 
     const phoneNumber = stripJid(primaryJid);
-    const messages = this.convertToMessages(allMessages, phoneNumber);
+
+    // For groups, fetch contacts to resolve participant names
+    let contactNameByJid: Map<string, string> | undefined;
+    if (isGroup) {
+      const contacts = await this.request<EvolutionContact[]>(
+        `/chat/findContacts/${encodeURIComponent(instanceName)}`,
+        { method: 'POST', body: JSON.stringify({ where: {} }) }
+      ).catch(() => [] as EvolutionContact[]);
+      contactNameByJid = new Map();
+      for (const c of contacts) {
+        if (c.pushName) contactNameByJid.set(c.remoteJid, c.pushName);
+      }
+    }
+
+    const messages = this.convertToMessages(allMessages, phoneNumber, contactNameByJid);
 
     // For dual JID: use max pages from either source
     const totalPages = Math.max(phoneResult.pages, lidResult.pages);
@@ -810,7 +835,19 @@ export class EvolutionProvider implements WhatsAppProvider {
       }
     }
 
-    return this.convertToMessages(allMessages, stripJid(primaryJid));
+    let contactNameByJid: Map<string, string> | undefined;
+    if (isGroup) {
+      const contacts = await this.request<EvolutionContact[]>(
+        `/chat/findContacts/${encodeURIComponent(instanceName)}`,
+        { method: 'POST', body: JSON.stringify({ where: {} }) }
+      ).catch(() => [] as EvolutionContact[]);
+      contactNameByJid = new Map();
+      for (const c of contacts) {
+        if (c.pushName) contactNameByJid.set(c.remoteJid, c.pushName);
+      }
+    }
+
+    return this.convertToMessages(allMessages, stripJid(primaryJid), contactNameByJid);
   }
 
   async sendText(instanceName: string, params: SendTextParams): Promise<SendResult> {
