@@ -354,6 +354,7 @@ app.post('/message/sendMedia/:instance', async (c) => {
     caption?: string;
     fileName?: string;
     mimetype?: string;
+    ptt?: boolean;
   }>();
 
   const id = `sent-media-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -381,7 +382,7 @@ app.post('/message/sendMedia/:instance', async (c) => {
   } else if (mediatype === 'video') {
     messageContent = { videoMessage: { mimetype, caption: body.caption ?? '', fileName: body.fileName ?? 'video.mp4', fileLength: byteLength } };
   } else if (mediatype === 'audio') {
-    messageContent = { audioMessage: { mimetype, fileName: body.fileName ?? 'audio.ogg', fileLength: byteLength, ptt: false } };
+    messageContent = { audioMessage: { mimetype, fileName: body.fileName ?? 'audio.ogg', fileLength: byteLength, ptt: body.ptt ?? false } };
   } else {
     messageContent = { documentMessage: { mimetype, title: body.fileName ?? 'document', fileName: body.fileName ?? 'document', fileLength: byteLength, caption: body.caption ?? '' } };
   }

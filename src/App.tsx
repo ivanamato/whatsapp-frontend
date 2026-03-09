@@ -13,9 +13,10 @@ type AppProps = {
   chatActions?: ChatActionsResolver;
   chatTags?: ChatTagsResolver;
   chatTagsBulk?: BulkChatTagsResolver;
+  prefillToken?: { id: number; message: string } | null;
 };
 
-export function App({ conversationListRef: externalRef, chatActions, chatTags, chatTagsBulk }: AppProps = {}) {
+export function App({ conversationListRef: externalRef, chatActions, chatTags, chatTagsBulk, prefillToken }: AppProps = {}) {
   const { selectedDevice, viewMode } = useDeviceContext();
   const internalRef = useRef<ConversationListRef>(null);
   const conversationListRef = externalRef || internalRef;
@@ -39,7 +40,7 @@ export function App({ conversationListRef: externalRef, chatActions, chatTags, c
   );
 
   return (
-    <div className="wa:h-screen wa:flex wa:flex-col wa:bg-[#d1d7db]">
+    <div className="wa:h-full wa:flex wa:flex-col wa:bg-[#d1d7db]">
       {/* Teal top bar — the iconic WhatsApp Web color band */}
       <div className="wa:bg-[#00a884] wa:flex-shrink-0" style={{ height: 127 }}>
         <div style={{ padding: '19px 19px 12px' }}>
@@ -84,6 +85,7 @@ export function App({ conversationListRef: externalRef, chatActions, chatTags, c
           provider={provider}
           readOnly={effectiveReadOnly}
           providerOverride={providerOverride}
+          prefillToken={prefillToken}
         />
         </div>
       </div>

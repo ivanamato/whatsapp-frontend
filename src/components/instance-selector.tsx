@@ -193,6 +193,7 @@ function ViewModeToggle({ viewMode, onViewModeChange }: { viewMode: ViewMode; on
   return (
     <label className="wa:flex wa:items-center wa:gap-2 wa:flex-shrink-0 wa:cursor-pointer wa:select-none">
       <button
+        data-testid="merge-devices-toggle"
         role="switch"
         aria-checked={isAll}
         onClick={() => onViewModeChange(isAll ? 'single' : 'all')}

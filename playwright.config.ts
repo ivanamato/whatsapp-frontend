@@ -7,6 +7,13 @@ export default defineConfig({
     baseURL: 'http://localhost:5173',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
+    permissions: ['microphone'],
+    launchOptions: {
+      args: [
+        '--use-fake-ui-for-media-stream',
+        '--use-fake-codec-for-recording',
+      ],
+    },
   },
   // No webServer — assumes the docker stack is running: make docker
 });

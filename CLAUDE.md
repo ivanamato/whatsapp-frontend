@@ -77,7 +77,7 @@ To add a new provider: implement `WhatsAppProvider`, add a case in `createProvid
 - **`ConversationList`** — Left sidebar with chat list (exposes `refresh()` via ref)
 - **`MessageView`** — Right panel with message thread and composer
 
-`src/dev.tsx` is the dev server entry point (reads `devices.json`, renders `App` inside `ProviderProvider`).
+`src/dev.tsx` is the dev server entry point (reads `devices.json`, calls `mount()`, exposes `window.__whatsappInbox`).
 
 Auto-polling via `src/hooks/use-auto-polling.ts` (10s conversations, 5s messages, pauses when tab hidden).
 
@@ -100,6 +100,7 @@ Business logic lives in `src/use-cases/`:
 
 ### Key Patterns
 
+- **`selectConversation(phone, prefill?, deviceId?)`** on the `WhatsAppInbox` object opens a conversation programmatically. In `single` viewMode, if `deviceId` differs from the active device the inbox switches device first, then calls `ConversationListRef.refresh()` on the new device's chat list before selecting — this prevents matching against stale data from the previous device. In `all` (merged) viewMode no device switch occurs; `deviceId` is passed to `selectByPhoneNumber` only to disambiguate duplicates. A nonce-based `prefillToken` is used so the prefill is applied exactly once per call and never re-applied on subsequent manual chat switches.
 - **Chat actions always visible.** The three-dot (⋮) button renders on every chat row regardless of whether `chatActions` is configured. Clicking it always opens the contact panel (profile picture, name, phone, device). Custom action buttons only appear if a `chatActions` resolver is provided. `resolver` is therefore optional on `ChatActionsDialog`.
 - **Chat tags & filtering.** `chatTags` async resolver on config returns colored tag pills per chat. Tags are resolved eagerly for all visible chats. Users can filter the conversation list by clicking tag chips above the list (AND logic). Types: `ChatTag`, `ChatTagsResolver`.
 - **No backend.** Components call `provider.findChats()`, `provider.sendText()`, etc. directly. Requires CORS on the Evolution API (`CORS_ORIGIN=*`). Uses per-instance tokens (not the global API key) so each device can only access its own instance.
@@ -208,6 +209,7 @@ tests/e2e/
   chat-list.spec.ts
   message-thread.spec.ts
   chat-actions.spec.ts
+  open-conversation.spec.ts     # selectConversation API (prefill + device selection)
 ```
 
 **Conventions:**
@@ -237,10 +239,32 @@ tests/e2e/
 | | `chat-actions-phone-number` | Phone in panel |
 | | `chat-actions-close` | X button |
 | | `chat-action-button` + `data-action-id` | Custom action button |
+| `instance-selector.tsx` | `merge-devices-toggle` | View-mode switch (`role="switch"`, `aria-checked`) |
 
 ### Vue 3 example (`make example-vue3`)
 
 Builds the library then serves the project root at `localhost:5174`. The example at `http://localhost:5174/examples/vue3/` points to the docker mock server at `localhost:3002` (MOCK1 + MOCK2 instances). Requires `make docker` to be running first.
+
+## Dev Testing Sidebar
+
+When running the dev server (`make docker` or `make mock`), a 260px sidebar appears on the right side of the page — outside the inbox component, so it never overlaps the UI.
+
+**Location:** `src/dev.tsx` (DOM built imperatively after `mount()`). Layout defined in `index.html` (`#layout` flex row, `#app` + `#dev-sidebar`).
+
+**Helper functions available inside `loadConfig().then(...)`:**
+- `section(title)` — appends a labelled group to the sidebar, returns the wrapper `<div>` to append buttons into
+- `btn(label, onClick, accent?)` — creates a full-width button; default accent `#00a884` (green), use `#2563eb` (blue) for prefill variants
+
+**Current sections:**
+- *Open conversation* — one button per contact (MOCK1 + MOCK2), calls `inbox.selectConversation(phone, undefined, deviceId)`
+- *Open with prefill* — blue buttons calling `inbox.selectConversation(phone, prefillText, deviceId)`
+
+**To add a new section**, append `section()` + `btn()` calls after the existing ones in `dev.tsx`. The sidebar is scrollable so sections can grow freely.
+
+**`window.__whatsappInbox`** is also exposed for quick console testing:
+```js
+__whatsappInbox.selectConversation('556992924255', 'Hello!', 'mock-device-1')
+```
 
 ## Environment
 

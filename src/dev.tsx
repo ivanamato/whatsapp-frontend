@@ -1,7 +1,6 @@
 import { createRoot } from 'react-dom/client';
-import { ProviderProvider } from './lib/provider-context';
-import type { WhatsAppMultiDeviceConfig, ChatTagsResolver } from './lib/providers/types';
-import { App } from './App';
+import type { WhatsAppMultiDeviceConfig, ChatTagsResolver, ChatActionsResolver } from './lib/providers/types';
+import { mount } from './index';
 import './app/globals.css';
 
 async function loadConfig(): Promise<WhatsAppMultiDeviceConfig> {
@@ -58,10 +57,81 @@ const devChatTags: ChatTagsResolver = (chat) => {
   return tags;
 };
 
+const devChatActions: ChatActionsResolver = (chat) => {
+  const actions = [];
+
+  if (chat.contactName) {
+    actions.push({
+      id: 'open-crm',
+      label: 'Open in CRM',
+      onClick: () => console.log('[dev] Open in CRM:', chat.contactName, chat.phoneNumber),
+    });
+  }
+
+  actions.push({
+    id: 'search-crm',
+    label: 'Search CRM',
+    onClick: () => console.log('[dev] Search CRM:', chat.phoneNumber),
+  });
+
+  actions.push({
+    id: 'tag-vip',
+    label: 'Tag as VIP',
+    onClick: () => console.log('[dev] Tag as VIP:', chat.phoneNumber),
+  });
+
+  return actions;
+};
+
 loadConfig().then((config) => {
-  createRoot(document.getElementById('app')!).render(
-    <ProviderProvider config={{ ...config, chatTags: devChatTags }}>
-      <App chatTags={devChatTags} />
-    </ProviderProvider>
-  );
+  const inbox = mount(document.getElementById('app')!, {
+    ...config,
+    chatTags: devChatTags,
+    chatActions: devChatActions,
+  });
+  // Expose the inbox API for E2E testing and development convenience
+  (window as unknown as Record<string, unknown>).__whatsappInbox = inbox;
+
+  // Populate the dev sidebar
+  const sidebar = document.getElementById('dev-sidebar')!;
+
+  function section(title: string): HTMLDivElement {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'padding:16px 16px 8px';
+    const h = document.createElement('p');
+    h.textContent = title;
+    h.style.cssText = 'color:#8696a0;font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;margin-bottom:10px';
+    wrap.appendChild(h);
+    sidebar.appendChild(wrap);
+    return wrap;
+  }
+
+  function btn(label: string, onClick: () => void, accent = '#00a884'): HTMLButtonElement {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.style.cssText = [
+      `background:${accent}`, 'color:#fff', 'border:none', 'border-radius:8px',
+      'padding:9px 12px', 'font-size:13px', 'font-weight:500', 'cursor:pointer',
+      'text-align:left', 'width:100%', 'display:block', 'margin-bottom:6px',
+      'transition:opacity 150ms',
+    ].join(';');
+    b.addEventListener('mouseover', () => { b.style.opacity = '0.8'; });
+    b.addEventListener('mouseout', () => { b.style.opacity = '1'; });
+    b.addEventListener('click', onClick);
+    return b;
+  }
+
+  // ── Section: Open conversation ──────────────────────────────────────────
+  const s1 = section('Open conversation');
+  s1.appendChild(btn('Ana Beatriz (device 1)', () => inbox.selectConversation('556992924255', undefined, 'mock-device-1')));
+  s1.appendChild(btn('Carlos Eduardo (device 1)', () => inbox.selectConversation('5511987654321', undefined, 'mock-device-1')));
+  s1.appendChild(btn('Sarah Johnson (device 2)', () => inbox.selectConversation('15551234567', undefined, 'mock-device-2')));
+  s1.appendChild(btn('James Wright (device 2)', () => inbox.selectConversation('447911123456', undefined, 'mock-device-2')));
+
+  // ── Section: Open with prefill ──────────────────────────────────────────
+  const s2 = section('Open with prefill');
+  s2.appendChild(btn('Ana Beatriz + prefill', () =>
+    inbox.selectConversation('556992924255', 'Hello, I have a question!', 'mock-device-1'), '#2563eb'));
+  s2.appendChild(btn('Sarah Johnson + prefill', () =>
+    inbox.selectConversation('15551234567', 'Following up on your request', 'mock-device-2'), '#2563eb'));
 });

@@ -24,7 +24,7 @@ export type WhatsAppInbox = {
   getConnectionState: () => Promise<'open' | 'close' | 'connecting'>;
   getActiveDevice: () => string | null;
   setActiveDevice: (deviceId: string) => void;
-  selectConversation: (phoneNumber: string) => void;
+  selectConversation: (phoneNumber: string, prefillMessage?: string, deviceId?: string) => void;
   unmount: () => void;
 };
 
@@ -62,7 +62,7 @@ export function mount(element: HTMLElement, config: WhatsAppMultiDeviceConfig): 
     getConnectionState: () => getBridge().getConnectionState(),
     getActiveDevice: () => getBridge().getActiveDevice(),
     setActiveDevice: (deviceId) => getBridge().setActiveDevice(deviceId),
-    selectConversation: (phoneNumber) => getBridge().selectConversation(phoneNumber),
+    selectConversation: (phoneNumber, prefillMessage?, deviceId?) => getBridge().selectConversation(phoneNumber, prefillMessage, deviceId),
     unmount: () => {
       root.unmount();
       roots.delete(element);

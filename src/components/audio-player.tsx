@@ -86,7 +86,7 @@ export function AudioPlayer({ src, isOutbound, onError }: Props) {
   const displayTime = playing || currentTime > 0 ? currentTime : duration;
 
   return (
-    <div className="wa:flex wa:items-center wa:gap-2 wa:min-w-[240px] wa:max-w-[320px]">
+    <div data-testid="audio-player" className="wa:flex wa:items-center wa:gap-2 wa:min-w-[240px] wa:max-w-[320px]">
       <audio ref={audioRef} src={src} preload="metadata" onError={onError} />
 
       {/* Mic icon */}

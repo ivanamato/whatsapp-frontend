@@ -103,6 +103,7 @@ export type SendMediaParams = {
   caption?: string;
   fileName?: string;
   mimeType?: string;
+  ptt?: boolean;
 };
 
 export type SendButtonsParams = {

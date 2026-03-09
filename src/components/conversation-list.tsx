@@ -42,7 +42,8 @@ type Props = {
 
 export type ConversationListRef = {
   refresh: () => Promise<Conversation[]>;
-  selectByPhoneNumber: (phoneNumber: string) => void;
+  selectByPhoneNumber: (phoneNumber: string, deviceId?: string) => Promise<void>;
+  select: (conversation: Conversation) => void;
 };
 
 export const ConversationList = forwardRef<ConversationListRef, Props>(
@@ -54,6 +55,7 @@ export const ConversationList = forwardRef<ConversationListRef, Props>(
   const scrollParentRef = useRef<HTMLDivElement>(null);
 
   const {
+    conversations,
     filteredConversations,
     loading,
     refreshing,
@@ -65,16 +67,22 @@ export const ConversationList = forwardRef<ConversationListRef, Props>(
     availableTags,
     tagMap,
     isPolling,
-    findByPhoneNumber,
   } = useChatList({ instance, chatTags, chatTagsBulk });
 
   const handleRefresh = () => { refresh(); };
 
   useImperativeHandle(ref, () => ({
     refresh,
-    selectByPhoneNumber: (phoneNumber: string) => {
-      const conversation = findByPhoneNumber(phoneNumber);
-      if (conversation) onSelectConversation(conversation);
+    select: (conversation: Conversation) => { onSelectConversation(conversation); },
+    selectByPhoneNumber: async (phoneNumber: string, deviceId?: string) => {
+      const match = (c: Conversation) =>
+        c.phoneNumber === phoneNumber && (!deviceId || c.deviceId === deviceId);
+      const immediate = conversations.find(match);
+      if (immediate) { onSelectConversation(immediate); return; }
+      // Not in current list — refresh first (handles just-switched device or merged mode)
+      const fresh = await refresh();
+      const found = fresh.find(match);
+      if (found) onSelectConversation(found);
     },
   }));
 

@@ -70,6 +70,14 @@ test.describe('Chat actions panel', () => {
     await chatActions.waitForClosed();
   });
 
+  test('shows stub action buttons configured in dev.tsx', async () => {
+    await chatList.openChatMenu('Ana Beatriz');
+    await chatActions.waitForOpen();
+
+    // dev.tsx configures devChatActions — at least one button must appear
+    await expect(chatActions.allActionButtons().first()).toBeVisible({ timeout: 5000 });
+  });
+
   test('clicking menu button does not open the message thread', async ({ page }) => {
     await chatList.openChatMenu('Ana Beatriz');
     await chatActions.waitForOpen();

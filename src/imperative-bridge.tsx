@@ -1,4 +1,4 @@
-import { forwardRef, useImperativeHandle, useRef } from 'react';
+import { forwardRef, useImperativeHandle, useRef, useState, useEffect } from 'react';
 import { useProvider, useDeviceContext } from '@/lib/provider-context';
 import { App } from '@/App';
 import { ErrorBoundary } from '@/components/error-boundary';
@@ -12,7 +12,7 @@ export type ImperativeApi = {
   getConnectionState: () => Promise<'open' | 'close' | 'connecting'>;
   getActiveDevice: () => string | null;
   setActiveDevice: (deviceId: string) => void;
-  selectConversation: (phoneNumber: string) => void;
+  selectConversation: (phoneNumber: string, prefillMessage?: string, deviceId?: string) => void;
 };
 
 type Props = {
@@ -24,8 +24,25 @@ type Props = {
 export const ImperativeApiBridge = forwardRef<ImperativeApi, Props>(
   ({ chatActions, chatTags, chatTagsBulk }, ref) => {
     const provider = useProvider();
-    const { selectedDevice, selectDevice, devices, getProviderForDevice } = useDeviceContext();
+    const { selectedDevice, selectDevice, devices, getProviderForDevice, viewMode } = useDeviceContext();
     const conversationListRef = useRef<ConversationListRef>(null);
+    const [prefillToken, setPrefillToken] = useState<{ id: number; message: string } | null>(null);
+    const prefillCounterRef = useRef(0);
+    const [pendingPhone, setPendingPhone] = useState<string | null>(null);
+
+    // Apply a pending conversation selection after a device switch re-render.
+    // Always refresh first so we search in the new device's chats, not stale data.
+    useEffect(() => {
+      if (!pendingPhone) return;
+      const phone = pendingPhone;
+      setPendingPhone(null);
+      const ref = conversationListRef.current;
+      if (!ref) return;
+      ref.refresh().then(fresh => {
+        const found = fresh.find(c => c.phoneNumber === phone);
+        if (found) ref.select(found);
+      });
+    }, [selectedDevice?.id, pendingPhone]);
 
     useImperativeHandle(ref, () => ({
       getChats: async () => {
@@ -55,10 +72,25 @@ export const ImperativeApiBridge = forwardRef<ImperativeApi, Props>(
         const device = devices.find(d => d.id === deviceId);
         if (device) selectDevice(deviceId);
       },
-      selectConversation: (phoneNumber: string) => {
-        conversationListRef.current?.selectByPhoneNumber(phoneNumber);
+      selectConversation: (phoneNumber: string, prefillMessage?: string, deviceId?: string) => {
+        if (prefillMessage !== undefined) {
+          prefillCounterRef.current += 1;
+          setPrefillToken({ id: prefillCounterRef.current, message: prefillMessage });
+        }
+        if (viewMode === 'all') {
+          // Merged mode: all devices are visible in one list — no device switch needed.
+          // Pass deviceId so we match the right device when the same number exists on multiple devices.
+          conversationListRef.current?.selectByPhoneNumber(phoneNumber, deviceId);
+        } else if (deviceId && deviceId !== selectedDevice?.id) {
+          const device = devices.find(d => d.id === deviceId);
+          if (device) selectDevice(deviceId);
+          // Defer selection until after the device-switch re-render
+          setPendingPhone(phoneNumber);
+        } else {
+          conversationListRef.current?.selectByPhoneNumber(phoneNumber);
+        }
       },
-    }), [provider, selectedDevice, selectDevice, devices, getProviderForDevice]);
+    }), [provider, selectedDevice, selectDevice, devices, getProviderForDevice, viewMode]);
 
     return (
       <ErrorBoundary>
@@ -67,6 +99,7 @@ export const ImperativeApiBridge = forwardRef<ImperativeApi, Props>(
           chatActions={chatActions}
           chatTags={chatTags}
           chatTagsBulk={chatTagsBulk}
+          prefillToken={prefillToken}
         />
       </ErrorBoundary>
     );

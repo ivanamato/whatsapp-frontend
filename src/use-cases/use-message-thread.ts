@@ -58,6 +58,8 @@ function getMediaType(mimeType: string): 'image' | 'video' | 'audio' | 'document
 
 // ─── Hook ────────────────────────────────────────────────────────────────────
 
+type PrefillToken = { id: number; message: string } | null;
+
 type Props = {
   conversationId?: string;
   phoneNumber?: string;
@@ -73,11 +75,14 @@ type Props = {
    * the component's scroll effect will auto-scroll.
    */
   isNearBottomRef: RefObject<boolean>;
+  /** When set, pre-fills the message input once per unique token id when the conversation opens. */
+  prefillToken?: PrefillToken;
 };
 
 export function useMessageThread({
   conversationId,
   phoneNumber,
+  prefillToken,
   instance,
   providerType,
   providerOverride,
@@ -103,12 +108,26 @@ export function useMessageThread({
   const [forwardMessage, setForwardMessage] = useState<Message | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [recordingState, setRecordingState] = useState<'idle' | 'recording' | 'processing'>('idle');
+  const [recordingDuration, setRecordingDuration] = useState(0);
 
   const currentPageRef = useRef(1);
   const loadingMoreRef = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordingChunksRef = useRef<Blob[]>([]);
+  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const appliedPrefillIdRef = useRef<number | null>(null);
 
   const isCloudProvider = providerType === 'cloud';
+
+  // ─── Prefill ────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (prefillToken && prefillToken.id !== appliedPrefillIdRef.current) {
+      appliedPrefillIdRef.current = prefillToken.id;
+      setMessageInput(prefillToken.message);
+    }
+  }, [conversationId, prefillToken]);
 
   // ─── Data fetching ──────────────────────────────────────────────────────
 
@@ -343,6 +362,192 @@ export function useMessageThread({
     }
   }, [fetchInitialMessages, phoneNumber, onTemplateSent]);
 
+  const sendPastedFile = useCallback(async (file: File, caption: string) => {
+    if (!phoneNumber || !instance || sending) return;
+    const text = caption.trim();
+    const optimisticId = `optimistic-${Date.now()}`;
+    const optimisticMessage: Message = {
+      id: optimisticId,
+      direction: 'outbound',
+      content: text || file.name,
+      createdAt: new Date().toISOString(),
+      status: 'pending',
+      phoneNumber,
+      hasMedia: true,
+      messageType: getMediaType(file.type),
+      caption: text || null,
+      reactionEmoji: null,
+      reactedToMessageId: null,
+      filename: file.name,
+      mimeType: file.type,
+    };
+    setMessages(prev => [...prev, optimisticMessage]);
+    isNearBottomRef.current = true;
+    setSending(true);
+    try {
+      const base64 = await readFileAsBase64(file);
+      await provider.sendMedia(instance, {
+        to: phoneNumber,
+        mediaType: getMediaType(file.type),
+        media: base64,
+        caption: text || undefined,
+        fileName: file.name
+          .replace(/[\x00-\x1f/\\:*?"<>|]/g, '_')
+          .replace(/^\.+/, '_')
+          .replace(/[.\s]+$/, '')
+          .slice(0, 255) || 'unnamed',
+        mimeType: file.type,
+      });
+      await fetchInitialMessages();
+      onMessageSent?.();
+    } catch (error) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.error('Error sending pasted file:', error instanceof Error ? error.message : String(error));
+      }
+      setMessages(prev => prev.map(m => (m.id === optimisticId ? { ...m, status: 'failed' } : m)));
+    } finally {
+      setSending(false);
+    }
+  }, [phoneNumber, instance, sending, provider, fetchInitialMessages, onMessageSent, isNearBottomRef]);
+
+  // ─── Voice recording ────────────────────────────────────────────────────
+
+  const stopRecordingCleanup = useCallback(() => {
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+    setRecordingDuration(0);
+    recordingChunksRef.current = [];
+    mediaRecorderRef.current = null;
+  }, []);
+
+  const startRecording = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+      const mimeType = MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')
+        ? 'audio/ogg;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+          ? 'audio/webm;codecs=opus'
+          : 'audio/webm';
+
+      const recorder = new MediaRecorder(stream, { mimeType });
+      mediaRecorderRef.current = recorder;
+      recordingChunksRef.current = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          recordingChunksRef.current.push(e.data);
+        }
+      };
+
+      recorder.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        const chunks = recordingChunksRef.current;
+        stopRecordingCleanup();
+
+        if (chunks.length === 0 || !phoneNumber || !instance) {
+          setRecordingState('idle');
+          return;
+        }
+
+        setRecordingState('processing');
+        const blob = new Blob(chunks, { type: recorder.mimeType });
+
+        try {
+          const base64 = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve((reader.result as string).split(',')[1]);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+
+          const optimisticId = `optimistic-${Date.now()}`;
+          const optimisticMessage: Message = {
+            id: optimisticId,
+            direction: 'outbound',
+            content: 'Voice message',
+            createdAt: new Date().toISOString(),
+            status: 'pending',
+            phoneNumber,
+            hasMedia: true,
+            messageType: 'audio',
+            caption: null,
+            reactionEmoji: null,
+            reactedToMessageId: null,
+            filename: 'voice.ogg',
+            mimeType: blob.type,
+          };
+          setMessages(prev => [...prev, optimisticMessage]);
+          isNearBottomRef.current = true;
+
+          await provider.sendMedia(instance, {
+            to: phoneNumber,
+            mediaType: 'audio',
+            media: base64,
+            fileName: 'voice.ogg',
+            mimeType: blob.type,
+            ptt: true,
+          });
+          await fetchInitialMessages();
+          onMessageSent?.();
+        } catch (error) {
+          if (process.env.NODE_ENV !== 'production') {
+            console.error('Error sending voice message:', error instanceof Error ? error.message : String(error));
+          }
+        } finally {
+          setRecordingState('idle');
+        }
+      };
+
+      recorder.start(100);
+      setRecordingState('recording');
+      setRecordingDuration(0);
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingDuration(d => d + 1);
+      }, 1000);
+    } catch (error) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.error('Could not start recording:', error instanceof Error ? error.message : String(error));
+      }
+    }
+  }, [phoneNumber, instance, provider, fetchInitialMessages, onMessageSent, stopRecordingCleanup, isNearBottomRef]);
+
+  const stopRecording = useCallback(() => {
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.stop();
+    }
+  }, []);
+
+  const cancelRecording = useCallback(() => {
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.ondataavailable = null;
+      recorder.onstop = () => {
+        recorder.stream?.getTracks().forEach(t => t.stop());
+      };
+      recorder.stop();
+    }
+    stopRecordingCleanup();
+    setRecordingState('idle');
+  }, [stopRecordingCleanup]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.ondataavailable = null;
+        mediaRecorderRef.current.onstop = null;
+        mediaRecorderRef.current.stop();
+      }
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+      }
+    };
+  }, []);
+
   return {
     messages,
     loading,
@@ -372,5 +577,11 @@ export function useMessageThread({
     handleRefresh,
     isCloudProvider,
     currentPageRef,
+    recordingState,
+    recordingDuration,
+    startRecording,
+    stopRecording,
+    cancelRecording,
+    sendPastedFile,
   };
 }

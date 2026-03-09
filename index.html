@@ -7,11 +7,27 @@
     <title>WhatsApp Inbox</title>
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
-      html, body, #app { height: 100%; }
+      html, body { height: 100%; }
+      #layout { display: flex; height: 100%; }
+      #app { flex: 1; min-width: 0; height: 100%; }
+      #dev-sidebar {
+        width: 260px;
+        flex-shrink: 0;
+        height: 100%;
+        background: #0b141a;
+        border-left: 1px solid #1f2c33;
+        display: flex;
+        flex-direction: column;
+        overflow-y: auto;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      }
     </style>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="layout">
+      <div id="app"></div>
+      <div id="dev-sidebar"></div>
+    </div>
     <script type="module" src="/src/dev.tsx"></script>
   </body>
 </html>

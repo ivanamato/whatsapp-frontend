@@ -67,6 +67,30 @@ test.describe('Message thread', () => {
     expect(hasSenderName).toBe(true);
   });
 
+  test('Ctrl+Enter inserts a newline without sending', async () => {
+    await chatList.clickChat('Ana Beatriz');
+    await thread.waitForLoaded();
+
+    await thread.messageInput.fill('Hello');
+    await thread.messageInput.press('Control+Enter');
+
+    // Value should now contain a newline
+    await expect(thread.messageInput).toHaveValue('Hello\n');
+    // Input still has content — message was NOT sent (not cleared)
+    await expect(thread.messageInput).not.toHaveValue('');
+  });
+
+  test('Meta+Enter inserts a newline without sending (Mac Cmd+Enter)', async () => {
+    await chatList.clickChat('Ana Beatriz');
+    await thread.waitForLoaded();
+
+    await thread.messageInput.fill('World');
+    await thread.messageInput.press('Meta+Enter');
+
+    await expect(thread.messageInput).toHaveValue('World\n');
+    await expect(thread.messageInput).not.toHaveValue('');
+  });
+
   test('renders a document message attachment', async () => {
     // Ana Beatriz has a documentMessage with caption 'Relatório do mês' in MOCK1 fixtures
     await chatList.clickChat('Ana Beatriz');

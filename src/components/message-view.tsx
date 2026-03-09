@@ -1,6 +1,6 @@
-import { useEffect, useLayoutEffect, useRef, useCallback } from 'react';
+import { useEffect, useLayoutEffect, useRef, useCallback, useState } from 'react';
 import { format, isValid, isToday, isYesterday } from 'date-fns';
-import { RefreshCw, Paperclip, Send, X, AlertCircle, MessageSquare, XCircle, ListTree, ArrowLeft, Loader2, Clock } from 'lucide-react';
+import { RefreshCw, Paperclip, Send, X, AlertCircle, MessageSquare, XCircle, ListTree, ArrowLeft, Loader2, Clock, Mic, Square } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { MediaMessage } from '@/components/media-message';
 import { AudioPlayer } from '@/components/audio-player';
@@ -8,6 +8,7 @@ import { TemplateSelectorDialog } from '@/components/template-selector-dialog';
 import { InteractiveMessageDialog } from '@/components/interactive-message-dialog';
 import { MessageContextMenu } from '@/components/message-context-menu';
 import { ForwardMessageDialog } from '@/components/forward-message-dialog';
+import { ImagePasteModal } from '@/components/image-paste-modal';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -109,9 +110,10 @@ type Props = {
   provider?: string;
   readOnly?: boolean;
   providerOverride?: WhatsAppProvider;
+  prefillToken?: { id: number; message: string } | null;
 };
 
-export function MessageView({ conversationId, phoneNumber, contactName, profilePicUrl, onTemplateSent, onMessageSent, onBack, isVisible = false, instance, provider: providerType, readOnly = false, providerOverride }: Props) {
+export function MessageView({ conversationId, phoneNumber, contactName, profilePicUrl, onTemplateSent, onMessageSent, onBack, isVisible = false, instance, provider: providerType, readOnly = false, providerOverride, prefillToken }: Props) {
   const t = useTranslations();
 
   // DOM refs — scroll management stays in the presenter
@@ -119,6 +121,7 @@ export function MessageView({ conversationId, phoneNumber, contactName, profileP
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<Element | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isNearBottomRef = useRef(true);
   const scrollRafRef = useRef<number | null>(null);
   const scrollCleanupRef = useRef<(() => void) | null>(null);
@@ -133,6 +136,7 @@ export function MessageView({ conversationId, phoneNumber, contactName, profileP
     onTemplateSent,
     onMessageSent,
     isNearBottomRef,
+    prefillToken,
   });
 
   const {
@@ -164,7 +168,63 @@ export function MessageView({ conversationId, phoneNumber, contactName, profileP
     handleRefresh,
     isCloudProvider,
     currentPageRef,
+    recordingState,
+    recordingDuration,
+    startRecording,
+    stopRecording,
+    cancelRecording,
+    sendPastedFile,
   } = thread;
+
+  const [pasteModal, setPasteModal] = useState<{ file: File; url: string } | null>(null);
+
+  const isRecording = recordingState === 'recording' || recordingState === 'processing';
+  const showMicButton = !isRecording && !messageInput.trim() && !selectedFile;
+  const showSendButton = !isRecording && (!!messageInput.trim() || !!selectedFile);
+
+  function formatRecordingTime(seconds: number): string {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  }
+
+  const handleTextareaPaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of Array.from(items)) {
+      if (item.kind === 'file' && item.type.startsWith('image/')) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (!file) continue;
+        const url = URL.createObjectURL(file);
+        setPasteModal({ file, url });
+        break;
+      }
+    }
+  }, []);
+
+  const handlePasteModalSend = useCallback(async (caption: string) => {
+    if (!pasteModal) return;
+    const { file, url } = pasteModal;
+    setPasteModal(null);
+    URL.revokeObjectURL(url);
+    await sendPastedFile(file, caption);
+  }, [pasteModal, sendPastedFile]);
+
+  const handlePasteModalCancel = useCallback(() => {
+    if (pasteModal) {
+      URL.revokeObjectURL(pasteModal.url);
+      setPasteModal(null);
+    }
+  }, [pasteModal]);
+
+  // Auto-resize textarea as content changes
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+  }, [messageInput]);
 
   // Resolve the Radix viewport DOM element
   const getViewport = useCallback((): Element | null => {
@@ -631,6 +691,39 @@ export function MessageView({ conversationId, phoneNumber, contactName, profileP
               </div>
             )}
 
+            {isRecording ? (
+              <div data-testid="recording-indicator" style={{ padding: '10px 16px' }} className="wa:w-full wa:flex wa:gap-2 wa:items-center">
+                <div className="wa:flex wa:items-center wa:gap-2 wa:flex-1">
+                  <div className="wa:w-3 wa:h-3 wa:rounded-full wa:bg-red-500 wa:animate-pulse wa:flex-shrink-0" />
+                  <span className="wa:text-[15px] wa:text-[#111b21] wa:font-medium wa:tabular-nums">
+                    {formatRecordingTime(recordingDuration)}
+                  </span>
+                </div>
+                <Button
+                  data-testid="cancel-recording-button"
+                  type="button"
+                  onClick={cancelRecording}
+                  variant="ghost"
+                  size="icon"
+                  className="wa:text-[#54656f] hover:wa:bg-transparent hover:wa:text-[#111b21] wa:h-[42px] wa:w-[42px] wa:flex-shrink-0"
+                  title="Cancel recording"
+                >
+                  <X className="wa:h-[22px] wa:w-[22px]" />
+                </Button>
+                <Button
+                  data-testid="stop-recording-button"
+                  type="button"
+                  onClick={stopRecording}
+                  disabled={recordingState === 'processing'}
+                  variant="ghost"
+                  size="icon"
+                  className="wa:text-[#00a884] hover:wa:bg-transparent hover:wa:text-[#008f6f] wa:h-[42px] wa:w-[42px] wa:flex-shrink-0"
+                  title="Send voice message"
+                >
+                  <Square className="wa:h-[22px] wa:w-[22px] wa:fill-current" />
+                </Button>
+              </div>
+            ) : (
             <form onSubmit={handleSendMessage} style={{ padding: '10px 16px' }} className="wa:w-full wa:flex wa:gap-2 wa:items-end">
               <input
                 ref={fileInputRef}
@@ -662,38 +755,66 @@ export function MessageView({ conversationId, phoneNumber, contactName, profileP
                 <ListTree className="wa:h-[22px] wa:w-[22px]" />
               </Button>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <input
+                <textarea
+                  ref={textareaRef}
                   data-testid="message-input"
-                  type="text"
                   value={messageInput}
+                  rows={1}
                   onChange={(e) => setMessageInput(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      handleSendMessage(e);
+                    if (e.key === 'Enter') {
+                      if (e.ctrlKey || e.metaKey) {
+                        e.preventDefault();
+                        const el = e.currentTarget as HTMLTextAreaElement;
+                        const start = el.selectionStart ?? messageInput.length;
+                        const end = el.selectionEnd ?? messageInput.length;
+                        const newValue = messageInput.slice(0, start) + '\n' + messageInput.slice(end);
+                        setMessageInput(newValue);
+                        requestAnimationFrame(() => {
+                          el.selectionStart = start + 1;
+                          el.selectionEnd = start + 1;
+                        });
+                      } else if (!e.shiftKey) {
+                        e.preventDefault();
+                        send();
+                      }
                     }
                   }}
                   placeholder={t('messageView.typeMessage')}
                   disabled={sending}
-                  style={{ padding: '8px 12px' }}
-                  className="wa:w-full wa:h-[42px] wa:bg-white wa:border-none wa:outline-none wa:rounded-[8px] wa:text-[15px] wa:text-[#111b21] wa:placeholder-[#667781] focus:wa:ring-0"
+                  onPaste={handleTextareaPaste}
+                  style={{ padding: '8px 12px', resize: 'none', overflowY: 'hidden' }}
+                  className="wa:w-full wa:min-h-[42px] wa:bg-white wa:border-none wa:outline-none wa:rounded-[8px] wa:text-[15px] wa:text-[#111b21] wa:placeholder-[#667781] focus:wa:ring-0 wa:leading-[1.4]"
                 />
               </div>
-              <Button
-                data-testid="send-button"
-                type="submit"
-                disabled={sending || (!messageInput.trim() && !selectedFile)}
-                size="icon"
-                variant="ghost"
-                className={cn(
-                  "wa:h-[42px] wa:w-[42px] wa:flex-shrink-0 wa:rounded-full",
-                  (messageInput.trim() || selectedFile)
-                    ? "wa:text-[#00a884] hover:wa:bg-transparent hover:wa:text-[#008f6f]"
-                    : "wa:text-[#8696a0] hover:wa:bg-transparent"
-                )}
-              >
-                <Send className="wa:h-[22px] wa:w-[22px]" />
-              </Button>
+              {showMicButton && (
+                <Button
+                  data-testid="mic-button"
+                  type="button"
+                  onClick={startRecording}
+                  disabled={sending}
+                  size="icon"
+                  variant="ghost"
+                  className="wa:text-[#54656f] hover:wa:bg-transparent hover:wa:text-[#111b21] wa:h-[42px] wa:w-[42px] wa:flex-shrink-0 wa:rounded-full"
+                  title="Record voice message"
+                >
+                  <Mic className="wa:h-[22px] wa:w-[22px]" />
+                </Button>
+              )}
+              {showSendButton && (
+                <Button
+                  data-testid="send-button"
+                  type="submit"
+                  disabled={sending}
+                  size="icon"
+                  variant="ghost"
+                  className="wa:text-[#00a884] hover:wa:bg-transparent hover:wa:text-[#008f6f] wa:h-[42px] wa:w-[42px] wa:flex-shrink-0 wa:rounded-full"
+                >
+                  <Send className="wa:h-[22px] wa:w-[22px]" />
+                </Button>
+              )}
             </form>
+            )}
           </>
         ) : (
           <div className="wa:p-3 wa:max-w-[900px] wa:mx-auto wa:w-full">
@@ -745,6 +866,15 @@ export function MessageView({ conversationId, phoneNumber, contactName, profileP
         instance={instance}
         onForwarded={fetchInitialMessages}
       />
+
+      {pasteModal && (
+        <ImagePasteModal
+          imageFile={pasteModal.file}
+          imageUrl={pasteModal.url}
+          onSend={handlePasteModalSend}
+          onCancel={handlePasteModalCancel}
+        />
+      )}
     </div>
   );
 }

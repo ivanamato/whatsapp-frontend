@@ -142,7 +142,7 @@ const inbox = mount(element, config);
 | `getConnectionState()` | `Promise<'open' \| 'close' \| 'connecting'>` | Check the active device's connection state |
 | `getActiveDevice()` | `string \| null` | Get the currently selected device ID (synchronous) |
 | `setActiveDevice(deviceId)` | `void` | Switch the active device (synchronous) |
-| `selectConversation(phoneNumber)` | `void` | Select a conversation by phone number (synchronous) |
+| `selectConversation(phoneNumber, prefillMessage?, deviceId?)` | `void` | Open a conversation by phone number, optionally pre-filling the message input and/or switching to a specific device |
 | `unmount()` | `void` | Unmount the inbox and clean up |
 
 ### Example: Fetching chats and sending a message
@@ -180,12 +180,28 @@ if (state === 'open') {
 }
 ```
 
-### Example: Navigating to a conversation
+### Example: Opening a conversation with a pre-filled message
+
+`selectConversation` accepts an optional pre-fill message and an optional device ID. This is the primary integration point for CRM-style "reply to customer" flows.
 
 ```js
-// Select a conversation by phone number — scrolls to and highlights it
+// Open a conversation (same device, empty composer)
 inbox.selectConversation('5511999999999');
+
+// Open with a pre-filled message — the send button is immediately active
+inbox.selectConversation('5511999999999', 'Hello, following up on your request!');
+
+// Open on a specific device — switches device if needed, then loads the conversation
+inbox.selectConversation('5511999999999', undefined, 'device-2');
+
+// Full form: specific device + pre-filled message
+inbox.selectConversation('5511999999999', 'Hello!', 'device-2');
 ```
+
+**Device selection behaviour:**
+- **Single mode** (`viewMode: 'single'`): if `deviceId` differs from the active device, the inbox switches to that device first, fetches its chat list, then selects the conversation. If the phone number is not found on the specified device, nothing is selected.
+- **Merged mode** (`viewMode: 'all'`): all devices are already visible in one list — no device switch occurs. `deviceId` is used only to disambiguate if the same number appears on multiple devices.
+- Omitting `deviceId` always searches the currently visible chat list.
 
 ### Types
 

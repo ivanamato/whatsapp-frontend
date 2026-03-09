@@ -880,6 +880,7 @@ export class EvolutionProvider implements WhatsAppProvider {
           caption: params.caption || undefined,
           fileName: params.fileName || undefined,
           mimetype: params.mimeType || undefined,
+          ptt: params.ptt ?? undefined,
         }),
       }
     );
