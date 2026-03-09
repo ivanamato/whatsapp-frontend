@@ -8,9 +8,9 @@ Built with [Preact](https://preactjs.com/) + [Tailwind CSS v4](https://tailwindc
 
 - **Real-time messaging** — Auto-polling keeps conversations and messages updated
 - **Multi-device** — Switch between multiple WhatsApp instances via a device selector
-- **Imperative API** — Programmatic access to chats, messages, devices, and sending from outside React
-- **Conversation pre-selection & pre-fill** — Open a specific conversation programmatically and optionally pre-fill the composer with a message — ideal for CRM "reply to customer" flows
-- **Pre-built messages** — Per-device library of reusable text templates and audio voice notes, selectable from a searchable picker in the composer
+- **Imperative API** — Open conversations, pre-fill the composer, switch devices, send messages, and fetch data from outside the inbox
+- **Conversation pre-selection & pre-fill** — Open a specific conversation programmatically with an optional draft message — ideal for CRM "reply to customer" flows
+- **Pre-built messages** — Per-device library of reusable text templates and audio PTT voice notes, selectable from a searchable picker in the composer
 - **Custom chat actions** — Configurable action buttons per chat row driven by the host app
 - **Chat tags & filtering** — Colored tag pills on each chat, resolved by the host app, with clickable filter chips to narrow the list
 - **Template messages** — Send WhatsApp-approved templates with header, body, and button parameters
@@ -50,15 +50,9 @@ npm install @ivanamato/whatsapp-inbox
         apiUrl: 'https://your-evolution-api.com',
         instanceToken: 'your-instance-token',
         instanceName: 'your-instance',
-        providerType: 'evolution',
       },
     ],
-    defaultDeviceId: 'main',
   });
-
-  // Use the imperative API
-  const chats = await inbox.getChats();
-  await inbox.sendText({ to: '5511999999999@s.whatsapp.net', body: 'Hello!' });
 
   // Later: inbox.unmount();
 </script>
@@ -81,17 +75,26 @@ const inbox = mount(document.getElementById('inbox'), {
     },
   ],
 });
-
-// Use the imperative API
-const chats = await inbox.getChats();
-const messages = await inbox.getMessages(chats[0].id);
-
-// Later: inbox.unmount();
 ```
 
-## Configuration
+---
 
-The `mount()` function accepts an element and a config object:
+## Documentation
+
+### `mount(element, config)`
+
+Mounts the inbox into a DOM element and returns a [`WhatsAppInbox`](#imperative-api--whatsappinbox) handle.
+
+```ts
+function mount(element: HTMLElement, config: WhatsAppMultiDeviceConfig): WhatsAppInbox
+function unmount(element: HTMLElement): void
+```
+
+---
+
+### `config.devices` — Device configuration
+
+The `devices` array is the only required field. Each entry represents one WhatsApp instance.
 
 ```ts
 type DeviceConfig = {
@@ -104,93 +107,510 @@ type DeviceConfig = {
   readonly?: boolean;
   prebuiltMessages?: PrebuiltMessage[];
 };
-
-type WhatsAppMultiDeviceConfig = {
-  devices: DeviceConfig[];
-  defaultDeviceId?: string;
-  translations?: Partial<Translations>;
-  chatActions?: ChatActionsResolver;
-  chatTags?: ChatTagsResolver;
-};
 ```
 
 | Field | Required | Description |
-|-------|----------|-------------|
-| `devices` | Yes | Array of device configurations |
-| `devices[].id` | Yes | Unique identifier for the device |
-| `devices[].apiUrl` | Yes | Evolution API base URL |
-| `devices[].instanceToken` | Yes | Per-instance token from Evolution API (see [Security](#security)) |
-| `devices[].instanceName` | Yes | Evolution API instance name |
-| `devices[].label` | No | Display name in the device selector |
-| `devices[].providerType` | No | `'evolution'` (default) or `'cloud'` |
-| `devices[].readonly` | No | If `true`, disables sending messages |
-| `devices[].prebuiltMessages` | No | Per-device list of reusable text templates and audio voice notes (see [Pre-built Messages](#pre-built-messages)) |
-| `defaultDeviceId` | No | ID of the device to select on mount |
-| `translations` | No | Override UI strings (see [Translations](#translations)) |
-| `chatActions` | No | Async resolver for per-chat action buttons (see [Custom Chat Actions](#custom-chat-actions)) |
-| `chatTags` | No | Async resolver for per-chat colored tag pills with filtering (see [Chat Tags](#chat-tags)) |
+|---|---|---|
+| `id` | Yes | Unique identifier for this device — used to target it via the imperative API |
+| `apiUrl` | Yes | Evolution API base URL (e.g. `https://your-api.com`) |
+| `instanceToken` | Yes | Per-instance token from Evolution API — see [Security](#security) |
+| `instanceName` | Yes | Evolution API instance name |
+| `label` | No | Display name shown in the device selector dropdown |
+| `providerType` | No | `'evolution'` (default) or `'cloud'` |
+| `readonly` | No | If `true`, hides the composer — agents can read but not send |
+| `prebuiltMessages` | No | Reusable message templates and audio voice notes — see [Pre-built Messages](#configdevicesprebuiltmessages--pre-built-messages) |
 
-## Imperative API
+**Minimal example:**
 
-The `mount()` function returns a `WhatsAppInbox` object with methods to programmatically control the inbox from outside the React tree. This enables host applications to integrate the inbox with their own UI, CRM systems, or automation workflows.
+```js
+mount(el, {
+  devices: [
+    {
+      id: 'support',
+      apiUrl: 'https://your-evolution-api.com',
+      instanceToken: 'your-per-instance-token',
+      instanceName: 'support-instance',
+      label: 'Support',
+    },
+  ],
+});
+```
+
+**Multi-device example:**
+
+```js
+mount(el, {
+  devices: [
+    {
+      id: 'sales',
+      label: 'Sales',
+      apiUrl: 'https://your-evolution-api.com',
+      instanceToken: 'token-for-sales-instance',
+      instanceName: 'sales',
+    },
+    {
+      id: 'support',
+      label: 'Support (read-only)',
+      apiUrl: 'https://your-evolution-api.com',
+      instanceToken: 'token-for-support-instance',
+      instanceName: 'support',
+      readonly: true,
+    },
+  ],
+  defaultDeviceId: 'sales',
+});
+```
+
+---
+
+### `config.defaultDeviceId`
+
+ID of the device to select on mount. Defaults to the first device in the array.
+
+```js
+mount(el, {
+  devices: [/* ... */],
+  defaultDeviceId: 'support',
+});
+```
+
+---
+
+### `config.translations`
+
+Override any UI string. All keys are optional — only provide what you want to change.
+
+```js
+mount(el, {
+  devices: [/* ... */],
+  translations: {
+    'messageView.typeMessage': 'Write a message…',
+    'messageView.sendTemplate': 'Use template',
+    'conversationList.searchPlaceholder': 'Search conversations',
+  },
+});
+```
+
+---
+
+### `config.chatActions` — Action buttons per chat row
+
+Adds a three-dot menu to every chat row. Clicking it opens a dialog showing the contact's profile picture, name, phone number, device name, and your custom action buttons.
 
 ```ts
-const inbox = mount(element, config);
+type ChatActionsResolver = (
+  chat: Chat,
+  device: DeviceConfig,
+) => ChatAction[] | Promise<ChatAction[]>;
+
+type ChatAction = {
+  id: string;
+  label: string;
+  icon?: ComponentType<{ className?: string }>; // e.g. from lucide-react
+  onClick: (chat: Chat, device: DeviceConfig) => void;
+};
 ```
 
-### Methods
-
-| Method | Returns | Description |
-|--------|---------|-------------|
-| `getChats()` | `Promise<Chat[]>` | Fetch all chats for the active device |
-| `getMessages(chatId, limit?)` | `Promise<Message[]>` | Fetch messages for a specific chat |
-| `sendText({ to, body })` | `Promise<SendResult>` | Send a text message from the active device |
-| `getConnectionState()` | `Promise<'open' \| 'close' \| 'connecting'>` | Check the active device's connection state |
-| `getActiveDevice()` | `string \| null` | Get the currently selected device ID (synchronous) |
-| `setActiveDevice(deviceId)` | `void` | Switch the active device (synchronous) |
-| `selectConversation(phoneNumber, prefillMessage?, deviceId?)` | `void` | Open a conversation by phone number, optionally pre-filling the message input and/or switching to a specific device |
-| `unmount()` | `void` | Unmount the inbox and clean up |
-
-### Example: Fetching chats and sending a message
+**Synchronous example:**
 
 ```js
-const inbox = mount(element, config);
+mount(el, {
+  devices: [/* ... */],
+  chatActions: (chat, device) => [
+    {
+      id: 'open-crm',
+      label: 'Open in CRM',
+      onClick: () => window.open(`https://crm.example.com/contacts/${chat.phoneNumber}`),
+    },
+    {
+      id: 'tag-vip',
+      label: 'Tag as VIP',
+      onClick: () => fetch('/api/tag', {
+        method: 'POST',
+        body: JSON.stringify({ phone: chat.phoneNumber, tag: 'vip' }),
+      }),
+    },
+  ],
+});
+```
 
-// Wait for the UI to load, then fetch chats
+**Async example — different actions based on CRM status:**
+
+```js
+mount(el, {
+  devices: [/* ... */],
+  chatActions: async (chat, device) => {
+    const customer = await fetch(`/api/crm/lookup?phone=${chat.phoneNumber}`)
+      .then(r => r.json())
+      .catch(() => null);
+
+    if (customer) {
+      return [
+        {
+          id: 'view-customer',
+          label: 'See Customer',
+          onClick: () => window.open(`/crm/customers/${customer.id}`),
+        },
+        {
+          id: 'create-ticket',
+          label: 'Create Support Ticket',
+          onClick: () => createTicket(customer.id, chat),
+        },
+      ];
+    }
+
+    return [
+      {
+        id: 'create-contact',
+        label: 'Create Contact in CRM',
+        onClick: () => createContact(chat.phoneNumber, device.id),
+      },
+    ];
+  },
+});
+```
+
+**Behavior:**
+- The three-dot icon always renders on every chat row, regardless of whether `chatActions` is configured
+- Custom buttons only appear when a resolver is provided
+- A loading spinner shows while the resolver is running
+- After clicking an action, the dialog closes automatically
+- Dismiss with X, backdrop click, or Escape
+
+---
+
+### `config.chatTags` — Colored tag pills on chat rows
+
+Displays colored pills below the contact name in each row. All unique tags across all chats appear as clickable filter chips above the list.
+
+```ts
+type ChatTagsResolver = (
+  chat: Chat,
+  device: DeviceConfig,
+) => ChatTag[] | Promise<ChatTag[]>;
+
+type ChatTag = {
+  id: string;       // Unique identifier — also used as the filter key
+  label: string;    // Text shown in the pill
+  color?: string;   // Text color (default: 'white')
+  background?: string; // Background color (default: '#00a884')
+};
+```
+
+**Example:**
+
+```js
+mount(el, {
+  devices: [/* ... */],
+  chatTags: async (chat, device) => {
+    const tags = [];
+
+    if (chat.unreadCount && chat.unreadCount > 0) {
+      tags.push({ id: 'unread', label: 'Unread', background: '#ff9800' });
+    }
+
+    if (chat.contactName) {
+      tags.push({ id: 'saved', label: 'Saved Contact', background: '#2196f3' });
+    }
+
+    // Fetch custom tags from your backend
+    const remote = await fetch(`/api/tags?phone=${chat.phoneNumber}`)
+      .then(r => r.json())
+      .catch(() => []);
+
+    return [...tags, ...remote];
+  },
+});
+```
+
+**Filtering behavior:**
+- Clicking a tag chip above the list toggles it as a filter
+- When multiple chips are selected, only chats matching **all** selected tags are shown (AND logic)
+- Tags re-resolve automatically on every poll cycle
+
+---
+
+### `config.devices[].prebuiltMessages` — Pre-built Messages
+
+A per-device library of reusable message templates. When configured, a **book icon** button appears in the composer. Clicking it opens a searchable picker.
+
+```ts
+type PrebuiltMessage = {
+  id: string;
+  label: string;   // Shown in the picker list
+  content: string; // Text to fill, or base64 audio data
+  type?: 'text' | 'audio'; // Default: 'text'
+  mimeType?: string;        // For audio only. Default: 'audio/ogg'
+};
+```
+
+| `type` | Behavior on selection |
+|---|---|
+| `'text'` (default) | Fills the composer input — agent can edit before sending |
+| `'audio'` | Sends immediately as a PTT voice note — composer is untouched |
+
+**Text templates:**
+
+```js
+mount(el, {
+  devices: [
+    {
+      id: 'support',
+      // ...credentials...
+      prebuiltMessages: [
+        {
+          id: 'greeting',
+          label: 'Greeting',
+          content: 'Hello! How can I help you today?',
+        },
+        {
+          id: 'followup',
+          label: 'Follow up',
+          content: "I'm following up on our previous conversation. Please let me know if you have any questions.",
+        },
+        {
+          id: 'closing',
+          label: 'Closing',
+          content: 'Thank you for your time! Have a great day.',
+        },
+        {
+          id: 'wait',
+          label: 'Please wait',
+          content: 'Just a moment while I look into that for you.',
+        },
+        {
+          id: 'escalate',
+          label: 'Escalation notice',
+          content: "I'm going to transfer you to a specialist who can better assist you.",
+        },
+      ],
+    },
+  ],
+});
+```
+
+**Audio voice notes:**
+
+Pre-record voice messages and encode them as base64. When selected, they are sent instantly as PTT (push-to-talk) voice notes — no typing required.
+
+```js
+import { readFileSync } from 'fs';
+
+// Encode an audio file as base64 (run once, store the result in your config)
+const voiceGreeting = readFileSync('voice-greeting.ogg').toString('base64');
+const voiceClosing  = readFileSync('voice-closing.ogg').toString('base64');
+
+mount(el, {
+  devices: [
+    {
+      id: 'support',
+      // ...credentials...
+      prebuiltMessages: [
+        {
+          id: 'voice-greeting',
+          label: 'Voice Greeting',
+          type: 'audio',
+          mimeType: 'audio/ogg',    // Recommended for WhatsApp
+          content: voiceGreeting,
+        },
+        {
+          id: 'voice-closing',
+          label: 'Voice Closing',
+          type: 'audio',
+          mimeType: 'audio/ogg',
+          content: voiceClosing,
+        },
+      ],
+    },
+  ],
+});
+```
+
+**Mixed text + audio (recommended for most teams):**
+
+```js
+prebuiltMessages: [
+  // Text templates — agent reviews before sending
+  { id: 'greeting',  label: 'Greeting',     content: 'Hello! How can I help you today?' },
+  { id: 'followup',  label: 'Follow up',    content: "I'm following up on our previous conversation." },
+  { id: 'closing',   label: 'Closing',      content: 'Thank you for your time! Have a great day.' },
+
+  // Audio voice notes — sent immediately on selection
+  { id: 'voice-hi',  label: 'Voice: Hi!',   type: 'audio', mimeType: 'audio/ogg', content: '<base64>' },
+  { id: 'voice-bye', label: 'Voice: Bye!',  type: 'audio', mimeType: 'audio/ogg', content: '<base64>' },
+],
+```
+
+**Picker behavior:**
+- Search filters on `label` for all items, and on `content` for text items (base64 audio content is never searched)
+- Dismiss with Escape, the X button, or clicking the backdrop
+- Different devices can have completely different message libraries
+
+Accepted audio formats: `audio/ogg` (recommended), `audio/webm`, `audio/mp4`, `audio/mpeg`.
+
+---
+
+### Imperative API — `WhatsAppInbox`
+
+`mount()` returns a `WhatsAppInbox` object for controlling the inbox programmatically.
+
+```ts
+type WhatsAppInbox = {
+  getChats(): Promise<Chat[]>;
+  getMessages(chatId: string, limit?: number): Promise<Message[]>;
+  sendText(params: SendTextParams): Promise<SendResult>;
+  getConnectionState(): Promise<'open' | 'close' | 'connecting'>;
+  getActiveDevice(): string | null;
+  setActiveDevice(deviceId: string): void;
+  selectConversation(phoneNumber: string, prefillMessage?: string, deviceId?: string): void;
+  unmount(): void;
+};
+```
+
+---
+
+#### `getChats()`
+
+Fetches all chats for the currently active device.
+
+```js
 const chats = await inbox.getChats();
-console.log(`Found ${chats.length} conversations`);
+console.log(`${chats.length} conversations on ${inbox.getActiveDevice()}`);
 
-// Send a message to the first chat
-if (chats.length > 0) {
-  const result = await inbox.sendText({
-    to: chats[0].id,
-    body: 'Hello from the imperative API!',
-  });
-  console.log('Sent message:', result.messageId);
-}
+// Find a specific contact
+const chat = chats.find(c => c.phoneNumber === '5511999999999');
+console.log(chat?.contactName, chat?.unreadCount);
 ```
 
-### Example: Switching devices and checking connection
+---
+
+#### `getMessages(chatId, limit?)`
+
+Fetches messages for a specific chat. `limit` defaults to 50.
 
 ```js
-// Check which device is active
-console.log('Active device:', inbox.getActiveDevice());
+const chats = await inbox.getChats();
+const messages = await inbox.getMessages(chats[0].id, 100);
 
-// Switch to another device
-inbox.setActiveDevice('device-2');
+const lastInbound = messages.filter(m => m.direction === 'inbound').at(-1);
+console.log('Last customer message:', lastInbound?.content);
+```
 
-// Check if the new device is connected
+---
+
+#### `sendText(params)`
+
+Sends a text message from the active device.
+
+```js
+const result = await inbox.sendText({
+  to: '5511999999999@s.whatsapp.net',
+  body: 'Hello from the imperative API!',
+});
+console.log('Message ID:', result.messageId);
+```
+
+---
+
+#### `getConnectionState()`
+
+Checks whether the active device's WhatsApp connection is open.
+
+```js
 const state = await inbox.getConnectionState();
-if (state === 'open') {
-  console.log('Device is connected');
+// 'open' | 'close' | 'connecting'
+
+if (state !== 'open') {
+  alert('WhatsApp is disconnected — please scan the QR code.');
 }
 ```
 
-### Example: Opening a conversation with a pre-filled message
+---
 
-See [Conversation Pre-selection & Pre-fill](#conversation-pre-selection--pre-fill) for the full reference and examples.
+#### `getActiveDevice()` / `setActiveDevice(deviceId)`
 
-### Types
+Read or change the currently selected device.
+
+```js
+console.log('Active device:', inbox.getActiveDevice()); // 'sales'
+
+inbox.setActiveDevice('support');
+console.log('Active device:', inbox.getActiveDevice()); // 'support'
+```
+
+---
+
+#### `selectConversation(phoneNumber, prefillMessage?, deviceId?)`
+
+Opens a conversation by phone number, optionally pre-filling the composer and/or switching to a specific device. This is the primary integration point for CRM and support tools.
+
+```js
+// Open a conversation on the active device
+inbox.selectConversation('5511999999999');
+
+// Pre-fill the composer — the agent reviews and clicks Send
+inbox.selectConversation('5511999999999', 'Hello, following up on your request!');
+
+// Switch to a specific device, then open the conversation
+inbox.selectConversation('5511999999999', undefined, 'support');
+
+// Switch device + pre-fill — the most common CRM integration pattern
+inbox.selectConversation('5511999999999', 'Hi! How can I help?', 'support');
+```
+
+**Pre-fill behavior:**
+- The message is written into the composer exactly as provided
+- The agent can edit it before sending — it is never sent automatically
+- Calling `selectConversation` again replaces the previous pre-fill (each call is tracked by an internal counter, so stale values are never applied)
+
+**Device switching behavior:**
+
+| Mode | `deviceId` provided | Result |
+|---|---|---|
+| Single (`viewMode: 'single'`) | Different from active | Switches device → fetches chat list → selects conversation |
+| Single | Same as active or omitted | Searches current chat list immediately |
+| Merged (`viewMode: 'all'`) | Any | No device switch — `deviceId` only disambiguates duplicate phone numbers |
+
+If the phone number is not found in the chat list, nothing is selected.
+
+**CRM integration example:**
+
+```js
+// When an agent clicks "Reply" in your CRM
+document.getElementById('reply-btn').addEventListener('click', () => {
+  inbox.selectConversation(
+    customer.phoneNumber,
+    `Hi ${customer.firstName}, thanks for reaching out! How can I help?`,
+    customer.assignedWhatsAppDevice,
+  );
+});
+```
+
+**Notification / webhook integration example:**
+
+```js
+// Open the conversation when a new inbound message webhook fires
+websocket.on('message', (event) => {
+  if (event.type === 'inbound') {
+    inbox.selectConversation(event.phoneNumber, undefined, event.deviceId);
+  }
+});
+```
+
+---
+
+#### `unmount()`
+
+Removes the inbox from the DOM and cleans up all subscriptions and timers.
+
+```js
+// When navigating away
+inbox.unmount();
+```
+
+---
+
+### TypeScript types
 
 ```ts
 type Chat = {
@@ -229,329 +649,14 @@ type Message = {
 };
 
 type SendTextParams = { to: string; body: string };
-type SendResult = { messageId: string; status?: string };
-```
-
-## Custom Chat Actions
-
-Chat actions add configurable buttons to each conversation row. When a user clicks the three-dot icon on a chat row, a dialog opens showing the contact's profile picture, name, phone number, device name, and your custom action buttons.
-
-Actions are resolved **dynamically** via an async callback — you can return different buttons depending on the chat, the device, or external data (e.g., whether the contact already exists in your CRM).
-
-### Configuration
-
-Pass a `chatActions` resolver function in the config:
-
-```js
-const inbox = mount(element, {
-  devices: [/* ... */],
-  chatActions: async (chat, device) => {
-    // Example: fetch CRM status and return different actions
-    const customer = await fetch(`/api/crm/lookup?phone=${chat.phoneNumber}`)
-      .then(r => r.json())
-      .catch(() => null);
-
-    if (customer) {
-      return [
-        {
-          id: 'view-customer',
-          label: 'See Customer',
-          onClick: () => window.open(`/crm/customers/${customer.id}`),
-        },
-      ];
-    }
-
-    return [
-      {
-        id: 'search-customer',
-        label: 'Search Customer',
-        onClick: () => window.open(`/crm/search?phone=${chat.phoneNumber}`),
-      },
-    ];
-  },
-});
-```
-
-You can also return actions synchronously if no async lookup is needed:
-
-```js
-chatActions: (chat, device) => [
-  {
-    id: 'open-crm',
-    label: 'Open in CRM',
-    onClick: (chat, device) => {
-      window.open(`https://crm.example.com/contacts/${chat.phoneNumber}`);
-    },
-  },
-  {
-    id: 'tag-vip',
-    label: 'Tag as VIP',
-    icon: StarIcon, // optional: any component accepting { className?: string }
-    onClick: (chat, device) => {
-      fetch('/api/tag', {
-        method: 'POST',
-        body: JSON.stringify({ phone: chat.phoneNumber, device: device.id, tag: 'vip' }),
-      });
-    },
-  },
-],
-```
-
-### Types
-
-```ts
-type ChatActionsResolver = (
-  chat: Chat,
-  device: DeviceConfig,
-) => ChatAction[] | Promise<ChatAction[]>;
-
-type ChatAction = {
-  id: string;                  // Unique identifier
-  label: string;               // Button text displayed in the dialog
-  icon?: ComponentType<{       // Optional icon component (e.g., from lucide-react)
-    className?: string;
-  }>;
-  onClick: (                   // Called when the user clicks the action
-    chat: Chat,                // The chat's normalized data
-    device: DeviceConfig,      // The device the chat belongs to
-  ) => void;
-};
-```
-
-### Callback parameters
-
-The resolver and each action's `onClick` receive two arguments:
-
-**`chat: Chat`** — The normalized chat data:
-- `chat.id` — Internal chat ID (JID)
-- `chat.phoneNumber` — Phone number in international format
-- `chat.contactName` — Contact name (if available)
-- `chat.profilePicUrl` — Profile picture URL (if available)
-- `chat.lastMessage` — Last message content, direction, and type
-- `chat.unreadCount` — Number of unread messages
-
-**`device: DeviceConfig`** — The device configuration for the chat:
-- `device.id` — Device ID from your config
-- `device.label` — Display name
-- `device.instanceName` — Evolution API instance name
-- `device.apiUrl` — API base URL
-
-### Behavior
-
-- A three-dot icon (⋮) always appears on the right side of every chat row, regardless of whether `chatActions` is configured
-- Clicking it opens a centered dialog with the contact's profile picture, name, phone number, and device name
-- Custom action buttons are shown below the contact info only when a `chatActions` resolver is provided
-- While the resolver is running, a loading spinner is displayed
-- If the resolver throws, an error message is shown in the dialog
-- Each resolved action renders as a full-width button in the dialog
-- After clicking an action, the dialog closes automatically
-- The dialog can also be closed with the X button, clicking the backdrop, or pressing Escape
-
-## Chat Tags
-
-Chat tags display colored pills on each conversation row, resolved dynamically by the host app. Users can filter the conversation list by clicking tag chips that appear above the list.
-
-### Configuration
-
-Pass a `chatTags` resolver function in the config:
-
-```js
-const inbox = mount(element, {
-  devices: [/* ... */],
-  chatTags: async (chat, device) => {
-    // Example: fetch tags from your backend
-    const tags = await fetch(`/api/tags?phone=${chat.phoneNumber}`)
-      .then(r => r.json())
-      .catch(() => []);
-
-    return tags;
-    // e.g. [{ id: 'vip', label: 'VIP', background: '#e91e63' }]
-  },
-});
-```
-
-Synchronous resolvers also work:
-
-```js
-chatTags: (chat, device) => {
-  const tags = [];
-  if (chat.unreadCount > 0) {
-    tags.push({ id: 'unread', label: 'Unread', background: '#ff9800' });
-  }
-  if (device.id === 'support') {
-    tags.push({ id: 'support', label: 'Support', background: '#2196f3' });
-  }
-  return tags;
-},
-```
-
-### Types
-
-```ts
-type ChatTagsResolver = (
-  chat: Chat,
-  device: DeviceConfig,
-) => ChatTag[] | Promise<ChatTag[]>;
-
-type ChatTag = {
-  id: string;            // Unique identifier (used for filtering)
-  label: string;         // Text displayed in the pill
-  color?: string;        // Text color (default: 'white')
-  background?: string;   // Background color (default: '#00a884')
-};
-```
-
-### Behavior
-
-- Tags are resolved **eagerly** for all visible conversations (not on-click like `chatActions`)
-- Tags re-resolve automatically when the conversation list updates (new fetch or poll)
-- Each tag renders as a small colored pill below the contact name
-- **Filtering:** All unique tags appear as clickable filter chips above the conversation list. Clicking a chip toggles it on/off. When multiple tags are selected, only conversations matching **all** selected tags are shown (AND logic)
-- If the resolver throws for a chat, that chat simply has no tags
-
-## Pre-built Messages
-
-Pre-built messages let you define a library of reusable content per device. A **book icon** button appears in the composer when `prebuiltMessages` is configured. Clicking it opens a searchable picker where the agent selects a message to use.
-
-Two types are supported:
-
-| `type` | Behavior |
-|---|---|
-| `'text'` (default) | Fills the composer text input — the agent can review and edit before sending |
-| `'audio'` | Sends immediately as a PTT (push-to-talk) voice note — no text input involved |
-
-### Configuration
-
-```js
-const inbox = mount(element, {
-  devices: [
-    {
-      id: 'support',
-      // ...credentials...
-      prebuiltMessages: [
-        // Text template — fills the composer
-        {
-          id: 'greeting',
-          label: 'Greeting',
-          content: 'Hello! How can I help you today?',
-        },
-        {
-          id: 'followup',
-          label: 'Follow up',
-          content: "I'm following up on our previous conversation. Please let me know if you have any questions.",
-        },
-        {
-          id: 'closing',
-          label: 'Closing',
-          content: 'Thank you for your time! Have a great day.',
-        },
-
-        // Audio voice note — sent immediately as PTT
-        {
-          id: 'voice-greeting',
-          label: 'Voice Greeting',
-          type: 'audio',
-          mimeType: 'audio/ogg',
-          content: '<base64-encoded audio data>',
-        },
-      ],
-    },
-  ],
-});
-```
-
-### Types
-
-```ts
-type PrebuiltMessage = {
-  id: string;
-  /** Short label shown in the picker */
-  label: string;
-  /**
-   * For type='text': the text to fill in the composer.
-   * For type='audio': base64-encoded audio data sent as a PTT voice note.
-   */
-  content: string;
-  /** 'text' (default) fills the composer; 'audio' sends immediately as PTT */
-  type?: 'text' | 'audio';
-  /** For type='audio': MIME type of the audio. Defaults to 'audio/ogg' */
-  mimeType?: string;
-};
-```
-
-### Picker behavior
-
-- The picker button only appears when `prebuiltMessages` is configured and non-empty for the active device
-- Selecting a **text** message fills the composer — the agent can still edit it before sending
-- Selecting an **audio** message sends it immediately as a PTT voice note without touching the text composer
-- The picker has a live search bar that filters on `label` (and `content` for text messages — base64 audio content is never searched)
-- The picker can be dismissed with Escape, the X button, or clicking the backdrop
-
-### Generating audio content
-
-Use any tool that can export audio as base64. For example, in Node.js:
-
-```js
-import { readFileSync } from 'fs';
-
-const base64 = readFileSync('voice-greeting.ogg').toString('base64');
-// Use this string as the `content` field for an audio prebuilt message
-```
-
-Accepted formats: `audio/ogg` (recommended for WhatsApp), `audio/webm`, `audio/mp4`, `audio/mpeg`.
-
----
-
-## Conversation Pre-selection & Pre-fill
-
-`selectConversation` is the primary integration point for CRM and support tools. It lets you open a specific conversation from outside the inbox — and optionally pre-fill the composer with a draft message so the agent can send it with a single click.
-
-### Opening a conversation
-
-```js
-// Open by phone number (active device, empty composer)
-inbox.selectConversation('5511999999999');
-
-// Pre-fill the composer — the send button activates immediately
-inbox.selectConversation('5511999999999', 'Hello, following up on your request!');
-
-// Target a specific device — switches device if needed, then loads the conversation
-inbox.selectConversation('5511999999999', undefined, 'device-2');
-
-// Full form: specific device + pre-filled message
-inbox.selectConversation('5511999999999', 'Hello!', 'device-2');
-```
-
-### Behavior
-
-- If `deviceId` is provided and differs from the active device, the inbox switches to that device first, then fetches the updated chat list, then selects the conversation
-- The pre-fill message is always written into the composer exactly as provided — the agent reviews and optionally edits it before sending
-- Calling `selectConversation` multiple times with different messages correctly replaces the previous pre-fill (each call increments an internal token counter so stale pre-fills are never applied)
-- If `deviceId` is omitted, the currently visible chat list is searched
-- If the phone number is not found in the chat list, nothing is selected
-
-**Single-device mode** (`viewMode: 'single'`): switches to the target device, waits for its chat list to load, then selects the conversation.
-
-**Merged mode** (`viewMode: 'all'`): all devices are already visible in one list — no device switch occurs. `deviceId` is used only to disambiguate when the same phone number appears on multiple devices.
-
-### Example: CRM "Reply to customer" button
-
-```js
-// In your CRM, when an agent clicks "Reply":
-document.getElementById('reply-btn').addEventListener('click', () => {
-  inbox.selectConversation(
-    customer.phoneNumber,
-    `Hi ${customer.firstName}, thanks for reaching out!`,
-    customer.assignedDevice,
-  );
-});
+type SendResult    = { messageId: string; status?: string };
 ```
 
 ---
 
 ## Security
 
-This library uses **per-instance tokens** instead of the Evolution API global key. Each token is scoped to a single WhatsApp instance — if a token is compromised, only that instance is affected (not your entire Evolution API server).
+This library uses **per-instance tokens** instead of the Evolution API global key. Each token is scoped to a single WhatsApp instance — if a token is compromised, only that instance is affected.
 
 To obtain the per-instance token:
 
@@ -561,7 +666,7 @@ curl -H "apikey: YOUR_GLOBAL_KEY" https://your-api.com/instance/fetchInstances
 
 Each instance in the response has a `token` field — use that as `instanceToken`.
 
-> **Important:** Never use the global API key in client-side code. The global key grants access to all instances and should only be used server-side for administration.
+> **Never use the global API key in client-side code.** The global key grants access to all instances and should only be used server-side for administration tasks.
 
 ## Examples
 
@@ -596,7 +701,7 @@ The fastest way to get started. Starts a local Evolution API mock on port 3002 a
 **With Docker (recommended):**
 
 ```bash
-make docker        # Build images and start in detached mode
+make docker          # Build images and start in detached mode
 # Open http://localhost:5173
 make docker-restart  # Rebuild and restart (after code changes)
 make docker-down     # Stop the stack
@@ -605,7 +710,7 @@ make docker-down     # Stop the stack
 **Without Docker:**
 
 ```bash
-make mock          # Starts mock server + Vite dev server concurrently
+make mock   # Starts mock server + Vite dev server concurrently
 # Open http://localhost:5173
 ```
 
@@ -661,9 +766,9 @@ just release-major   # Bump major, push tag, create release → publishes to npm
 
 ```
 dist/
-  whatsapp-inbox.es.js    ~395 KB  (ES module)
-  whatsapp-inbox.umd.js   ~245 KB  (UMD, works with <script> tags)
-  whatsapp-inbox.css       ~35 KB  (prefixed styles)
+  whatsapp-inbox.es.js    ~480 KB  (ES module)
+  whatsapp-inbox.umd.js   ~305 KB  (UMD, works with <script> tags)
+  whatsapp-inbox.css       ~37 KB  (prefixed styles)
   index.d.ts                       (TypeScript declarations)
 ```
 
@@ -680,11 +785,12 @@ src/
     instance-selector.tsx   # Device selector dialog
     conversation-list.tsx   # Left sidebar with chat list
     message-view.tsx        # Right panel with messages and composer
+    prebuilt-messages-dialog.tsx  # Pre-built message picker
+    image-paste-modal.tsx   # Clipboard image paste overlay
     media-message.tsx       # Image/video/document/audio rendering
-    audio-player.tsx        # Custom audio player
+    audio-player.tsx        # Custom audio player with waveform
     forward-message-dialog.tsx
     template-selector-dialog.tsx
-    template-parameters-dialog.tsx
     interactive-message-dialog.tsx
     message-context-menu.tsx
     ui/                     # shadcn/ui components (dialog, scroll-area, etc.)
@@ -695,7 +801,7 @@ src/
       index.ts              # createProvider() factory
     provider-context.tsx    # Preact context for multi-device state
   hooks/
-    use-auto-polling.ts     # Polling hook with visibility detection
+    use-auto-polling.ts     # Polling hook with tab-visibility detection
   use-cases/
     use-app-state.ts        # Top-level app state (selected conversation, device)
     use-chat-list.ts        # Chat list fetching and polling
@@ -711,17 +817,16 @@ mock-server/
 ### Key Patterns
 
 - **No backend** — All API calls (`findChats`, `sendText`, `getMediaUrl`, etc.) happen directly from the browser via the provider abstraction.
-- **Per-instance tokens** — Each device authenticates with its own scoped token, not the global API key. Tokens are generated by Evolution API when an instance is created.
+- **Per-instance tokens** — Each device authenticates with its own scoped token, not the global API key.
 - **Provider system** — Implement the `WhatsAppProvider` interface to add new backends. Currently supports Evolution API v2.
-- **Preact with compat** — Uses Preact with `preact/compat` so all React-ecosystem libraries (Radix UI, lucide-react) work unchanged.
+- **Preact with compat** — Uses Preact with `preact/compat` so React-ecosystem libraries work unchanged.
 - **CSS isolation** — Tailwind v4 with `wa:` prefix (e.g. `wa:flex`, `wa:p-4`). CSS variables namespaced as `--wa-*`.
-- **JID/LID deduplication** — Merges phone-based JIDs and anonymous Logical IDs using `remoteJidAlt`.
 - **Optimistic sends** — Messages appear immediately in the thread with a pending status; the chat list refreshes after the send resolves.
 - **Chat list reactivity** — `ConversationList` exposes a `refresh()` ref method called after sending, template sends, and on mount.
 
 ### Mock Server
 
-The mock server (`mock-server/`) is a [Hono](https://hono.dev/) HTTP server that replicates the Evolution API v2 contract. It is used for local development and Docker-based demos — no real WhatsApp credentials needed.
+The mock server (`mock-server/`) is a [Hono](https://hono.dev/) HTTP server that replicates the Evolution API v2 contract for local development — no real WhatsApp credentials needed.
 
 **Implemented endpoints:**
 
@@ -730,50 +835,23 @@ The mock server (`mock-server/`) is a [Hono](https://hono.dev/) HTTP server that
 | `/instance/connectionState/:instance` | GET | Returns `{ instance: { state: 'open' } }` |
 | `/chat/findChats/:instance` | POST | Returns chat list, dynamically updated with sent messages and unread counts |
 | `/chat/findContacts/:instance` | POST | Returns contacts, merged with dynamically created contacts |
-| `/chat/findMessages/:instance` | POST | Returns paginated messages; marks chat as read (clears unread) |
-| `/chat/getBase64FromMediaMessage/:instance` | POST | Returns stored base64 for sent media; placeholder for fixture media |
+| `/chat/findMessages/:instance` | POST | Returns paginated messages; marks chat as read |
+| `/chat/getBase64FromMediaMessage/:instance` | POST | Returns stored base64 for sent media |
 | `/message/sendText/:instance` | POST | Stores message, triggers delivery progression and auto-reply |
-| `/message/sendMedia/:instance` | POST | Stores message + actual base64 payload for later retrieval |
-| `/message/sendButtons/:instance` | POST | Stores button message with full structure |
-| `/chat/deleteMessageForEveryone/:instance` | DELETE | Marks message deleted; emits REVOKE protocol message |
+| `/message/sendMedia/:instance` | POST | Stores message + base64 payload |
+| `/message/sendButtons/:instance` | POST | Stores button message |
+| `/chat/deleteMessageForEveryone/:instance` | DELETE | Marks message deleted; emits REVOKE event |
 
-**Realistic behaviors:**
-- **Auth** — Validates `apikey` header; returns 401 for unknown tokens, 404 for unknown instances
-- **Message delivery** — Status progression: `PENDING` → `SERVER_ACK` (300ms) → `DELIVERY_ACK` (1.5s) → `READ` (2–3s)
-- **Auto-reply** — Each sent message triggers an "Example response" reply after 2–3s, from the correct contact name (or a random group participant for group chats)
-- **Chat list updates** — `findChats` dynamically merges fixture chats with store messages, recomputes `lastMessage`, `updatedAt`, and `unreadCount`; sorts by most recent
-- **Unread count** — Increments on incoming messages; resets to 0 when `findMessages` is called for that chat (simulates opening)
-- **New contacts** — Sending to an unknown JID auto-creates a contact entry
-- **Group JID resolution** — Bare numbers (e.g. `120363012345678901`) are matched against known JIDs to restore the correct suffix (`@g.us`, `@s.whatsapp.net`)
-- **Media storage** — Actual base64 payloads are stored by message ID and returned by `getBase64FromMediaMessage`
-- **Message deletion** — Emits a `protocolMessage` REVOKE event so the 5s poller picks up live deletions
-- **Deduplication** — Messages deduplicated by ID to handle LID + phone JID overlaps
-
-**Two mock instances:**
+**Mock instances:**
 - `MOCK1` — Brazilian contacts (Ana Beatriz, Carlos Eduardo, Equipe Vendas group, Fernanda Lima, Roberto Mendes)
 - `MOCK2` — International contacts (Sarah Johnson, James Wright, Product Team group, Miguel Torres)
-
-**Docker setup:**
-
-```
-browser → localhost:5173 (Vite frontend)
-       → localhost:3002 (mock-server, direct HTTP — allowed by CSP)
-```
-
-The frontend container volume-mounts the source tree for HMR. A shared `Dockerfile` installs dependencies; source is never copied into the image.
 
 ## Publishing
 
 Package is published to [npm](https://www.npmjs.com/package/@ivanamato/whatsapp-inbox) as `@ivanamato/whatsapp-inbox`. A GitHub Actions workflow (`.github/workflows/publish.yml`) automatically builds and publishes on every GitHub Release using Trusted Publishing (OIDC).
 
-- **Release commands:** `just release-minor` or `just release-major` bump the version, push the tag, and create a GitHub release (which triggers the publish workflow). The justfile is gitignored.
+- **Release commands:** `just release-minor` or `just release-major` bump the version, push the tag, and create a GitHub release (which triggers the publish workflow).
 - **`publishConfig`** in `package.json` sets `"access": "public"`.
-
-To install in another project:
-
-```bash
-npm install @ivanamato/whatsapp-inbox
-```
 
 ## License
 
