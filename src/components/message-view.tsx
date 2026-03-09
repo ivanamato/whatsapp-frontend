@@ -42,6 +42,7 @@ type Message = {
   metadata?: {
     mediaId?: string;
   };
+  senderName?: string;
 };
 
 function formatMessageTime(timestamp: string): string {
@@ -141,7 +142,34 @@ function shouldShowTail(messages: Message[], index: number): boolean {
   const curr = messages[index];
   if (prev.direction !== curr.direction) return true;
   // Also show tail if there's a date divider between them
-  return shouldShowDateDivider(curr, prev);
+  if (shouldShowDateDivider(curr, prev)) return true;
+  // Show tail when the inbound sender changes (group chats)
+  if (curr.direction === 'inbound' && prev.senderName !== curr.senderName) return true;
+  return false;
+}
+
+const SENDER_COLORS = [
+  '#e17055', '#00b894', '#0984e3', '#6c5ce7',
+  '#e84393', '#00cec9', '#fdcb6e', '#55efc4',
+];
+
+function getSenderColor(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return SENDER_COLORS[Math.abs(hash) % SENDER_COLORS.length];
+}
+
+/** Show sender name above a bubble when it's the first message in a run from that sender. */
+function shouldShowSenderName(messages: Message[], index: number): boolean {
+  const curr = messages[index];
+  if (curr.direction !== 'inbound' || !curr.senderName) return false;
+  if (index === 0) return true;
+  const prev = messages[index - 1];
+  if (prev.direction !== 'inbound') return true;
+  if (shouldShowDateDivider(curr, prev)) return true;
+  return prev.senderName !== curr.senderName;
 }
 
 type Props = {
@@ -692,6 +720,7 @@ export function MessageView({ conversationId, phoneNumber, contactName, profileP
               const showDateDivider = shouldShowDateDivider(message, prevMessage);
               const showTail = shouldShowTail(messages, index);
               const isOutbound = message.direction === 'outbound';
+              const showSenderName = shouldShowSenderName(messages, index);
 
               return (
                 <div key={message.id}>
@@ -748,6 +777,15 @@ export function MessageView({ conversationId, phoneNumber, contactName, profileP
                         </p>
                       ) : (
                         <>
+                          {/* Sender name */}
+                          {showSenderName && message.senderName && (
+                            <p
+                              style={{ color: getSenderColor(message.senderName), marginBottom: 2 }}
+                              className="wa:text-[12.5px] wa:font-medium wa:leading-[17px] wa:truncate"
+                            >
+                              {message.senderName}
+                            </p>
+                          )}
                           {/* Media content */}
                           {message.hasMedia && message.mediaData?.url ? (
                             <div style={{ margin: '-7px -12px 4px' }} className="wa:overflow-hidden wa:rounded-t-[7.5px]">

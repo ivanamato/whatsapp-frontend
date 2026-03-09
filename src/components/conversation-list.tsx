@@ -12,7 +12,7 @@ import { useTranslations } from '@/lib/i18n';
 import { sanitizeUrl } from '@/lib/url-utils';
 import { getAvatarInitials } from '@/lib/avatar-utils';
 import { ChatActionsTrigger, ChatActionsDialog, type Conversation as ChatActionsConversation } from '@/components/chat-actions-menu';
-import type { ChatActionsResolver, ChatTagsResolver, ChatTag, DeviceConfig } from '@/lib/providers/types';
+import type { ChatActionsResolver, ChatTagsResolver, BulkChatTagsResolver, BulkChatTagsEntry, ChatTag, DeviceConfig } from '@/lib/providers/types';
 
 type Conversation = {
   id: string;
@@ -52,6 +52,7 @@ type Props = {
   provider?: string;
   chatActions?: ChatActionsResolver;
   chatTags?: ChatTagsResolver;
+  chatTagsBulk?: BulkChatTagsResolver;
 };
 
 export type ConversationListRef = {
@@ -60,7 +61,7 @@ export type ConversationListRef = {
 };
 
 export const ConversationList = forwardRef<ConversationListRef, Props>(
-  ({ onSelectConversation, selectedConversationId, isHidden = false, instance, chatActions, chatTags }, ref) => {
+  ({ onSelectConversation, selectedConversationId, isHidden = false, instance, chatActions, chatTags, chatTagsBulk }, ref) => {
   const provider = useProvider();
   const { viewMode, devices, getProviderForDevice, selectedDevice } = useDeviceContext();
   const t = useTranslations();
@@ -169,11 +170,6 @@ export const ConversationList = forwardRef<ConversationListRef, Props>(
     }
   }, [viewMode, instance, doFetch]);
 
-  useEffect(() => {
-    setLoading(true);
-    fetchConversations();
-  }, [fetchConversations]);
-
   const handleRefresh = () => {
     setRefreshing(true);
     fetchConversations();
@@ -185,53 +181,94 @@ export const ConversationList = forwardRef<ConversationListRef, Props>(
     onPoll: fetchConversations
   });
 
-  // Resolve chat tags eagerly for all conversations
+  // Resolve chat tags for all conversations — uses bulk resolver when available (one HTTP call),
+  // falls back to per-item resolver otherwise.
   useEffect(() => {
-    if (!chatTags || conversations.length === 0) {
+    if (conversations.length === 0) {
       setTagMap(new Map());
       return;
     }
 
     let cancelled = false;
 
-    (async () => {
-      const entries: [string, ChatTag[]][] = [];
+    if (chatTagsBulk) {
+      // Bulk path: collect all entries and resolve in a single call
+      const bulkEntries: BulkChatTagsEntry[] = [];
       for (const conv of conversations) {
         const device = conv.deviceId
           ? devices.find(d => d.id === conv.deviceId)
           : selectedDevice;
         if (!device) continue;
+        const key = conv.deviceId ? `${conv.deviceId}::${conv.id}` : conv.id;
+        bulkEntries.push({
+          key,
+          chat: {
+            id: conv.id,
+            phoneNumber: conv.phoneNumber,
+            contactName: conv.contactName,
+            profilePicUrl: conv.profilePicUrl,
+            lastActiveAt: conv.lastActiveAt,
+            lastMessage: conv.lastMessage ? {
+              content: conv.lastMessage.content,
+              direction: conv.lastMessage.direction as 'inbound' | 'outbound',
+              type: conv.lastMessage.type,
+            } : undefined,
+            unreadCount: conv.unreadCount,
+          },
+          device,
+        });
+      }
 
-        const chat = {
-          id: conv.id,
-          phoneNumber: conv.phoneNumber,
-          contactName: conv.contactName,
-          profilePicUrl: conv.profilePicUrl,
-          lastActiveAt: conv.lastActiveAt,
-          lastMessage: conv.lastMessage ? {
-            content: conv.lastMessage.content,
-            direction: conv.lastMessage.direction as 'inbound' | 'outbound',
-            type: conv.lastMessage.type,
-          } : undefined,
-          unreadCount: conv.unreadCount,
-        };
-
+      (async () => {
         try {
-          const tags = await chatTags(chat, device);
-          const key = conv.deviceId ? `${conv.deviceId}::${conv.id}` : conv.id;
-          entries.push([key, tags]);
+          const result = await chatTagsBulk(bulkEntries);
+          if (!cancelled) setTagMap(result);
         } catch {
-          // skip failed resolutions
+          // skip
         }
-      }
+      })();
+    } else if (chatTags) {
+      // Per-item fallback path
+      (async () => {
+        const entries: [string, ChatTag[]][] = [];
+        for (const conv of conversations) {
+          const device = conv.deviceId
+            ? devices.find(d => d.id === conv.deviceId)
+            : selectedDevice;
+          if (!device) continue;
 
-      if (!cancelled) {
-        setTagMap(new Map(entries));
-      }
-    })();
+          const chat = {
+            id: conv.id,
+            phoneNumber: conv.phoneNumber,
+            contactName: conv.contactName,
+            profilePicUrl: conv.profilePicUrl,
+            lastActiveAt: conv.lastActiveAt,
+            lastMessage: conv.lastMessage ? {
+              content: conv.lastMessage.content,
+              direction: conv.lastMessage.direction as 'inbound' | 'outbound',
+              type: conv.lastMessage.type,
+            } : undefined,
+            unreadCount: conv.unreadCount,
+          };
+
+          try {
+            const tags = await chatTags(chat, device);
+            const key = conv.deviceId ? `${conv.deviceId}::${conv.id}` : conv.id;
+            entries.push([key, tags]);
+          } catch {
+            // skip failed resolutions
+          }
+        }
+
+        if (!cancelled) setTagMap(new Map(entries));
+      })();
+    } else {
+      setTagMap(new Map());
+      return;
+    }
 
     return () => { cancelled = true; };
-  }, [chatTags, conversations, devices, selectedDevice]);
+  }, [chatTagsBulk, chatTags, conversations, devices, selectedDevice]);
 
   const selectByPhoneNumber = (phoneNumber: string) => {
     const conversation = conversations.find(conv => conv.phoneNumber === phoneNumber);

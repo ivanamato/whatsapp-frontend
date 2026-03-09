@@ -3,7 +3,7 @@ import { useProvider, useDeviceContext } from '@/lib/provider-context';
 import { App } from '@/App';
 import { ErrorBoundary } from '@/components/error-boundary';
 import type { ConversationListRef } from '@/components/conversation-list';
-import type { Chat, Message, SendResult, SendTextParams, ChatActionsResolver, ChatTagsResolver } from '@/lib/providers/types';
+import type { Chat, Message, SendResult, SendTextParams, ChatActionsResolver, ChatTagsResolver, BulkChatTagsResolver } from '@/lib/providers/types';
 
 export type ImperativeApi = {
   getChats: () => Promise<Chat[]>;
@@ -18,10 +18,11 @@ export type ImperativeApi = {
 type Props = {
   chatActions?: ChatActionsResolver;
   chatTags?: ChatTagsResolver;
+  chatTagsBulk?: BulkChatTagsResolver;
 };
 
 export const ImperativeApiBridge = forwardRef<ImperativeApi, Props>(
-  ({ chatActions, chatTags }, ref) => {
+  ({ chatActions, chatTags, chatTagsBulk }, ref) => {
     const provider = useProvider();
     const { selectedDevice, selectDevice, devices, getProviderForDevice } = useDeviceContext();
     const conversationListRef = useRef<ConversationListRef>(null);
@@ -65,6 +66,7 @@ export const ImperativeApiBridge = forwardRef<ImperativeApi, Props>(
           conversationListRef={conversationListRef}
           chatActions={chatActions}
           chatTags={chatTags}
+          chatTagsBulk={chatTagsBulk}
         />
       </ErrorBoundary>
     );

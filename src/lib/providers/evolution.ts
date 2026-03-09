@@ -685,6 +685,7 @@ export class EvolutionProvider implements WhatsAppProvider {
           metadata: (!isDeleted && extracted.hasMedia)
             ? { mediaId: msg.key.id }
             : {},
+          senderName: msg.key.fromMe ? undefined : (msg.pushName || undefined),
         };
       });
   }

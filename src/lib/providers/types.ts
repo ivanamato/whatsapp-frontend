@@ -33,12 +33,23 @@ export type ChatTag = {
 
 export type ChatTagsResolver = (chat: Chat, device: DeviceConfig) => ChatTag[] | Promise<ChatTag[]>;
 
+export type BulkChatTagsEntry = {
+  /** Composite key matching the internal ConversationList key: `${device.id}::${chat.id}` or `${chat.id}` */
+  key: string;
+  chat: Chat;
+  device: DeviceConfig;
+};
+
+export type BulkChatTagsResolver = (entries: BulkChatTagsEntry[]) => Promise<Map<string, ChatTag[]>>;
+
 export type WhatsAppMultiDeviceConfig = {
   devices: DeviceConfig[];
   defaultDeviceId?: string;
   translations?: Partial<import('../i18n').Translations>;
   chatActions?: ChatActionsResolver;
   chatTags?: ChatTagsResolver;
+  /** Preferred over chatTags: resolves all chat tags in a single batch call. */
+  chatTagsBulk?: BulkChatTagsResolver;
 };
 
 export type Chat = {
@@ -76,6 +87,8 @@ export type Message = {
   filename?: string | null;
   mimeType?: string | null;
   metadata?: Record<string, unknown>;
+  /** Display name of the sender (from pushName). Shown above inbound message bubbles. */
+  senderName?: string;
 };
 
 export type SendTextParams = {

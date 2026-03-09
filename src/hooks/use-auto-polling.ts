@@ -4,9 +4,11 @@ type UseAutoPollingOptions = {
   interval?: number;
   enabled?: boolean;
   onPoll: () => void | Promise<void>;
+  /** Whether to fire the first poll immediately on start. Defaults to true. */
+  fireImmediately?: boolean;
 };
 
-export function useAutoPolling({ interval = 5000, enabled = true, onPoll }: UseAutoPollingOptions) {
+export function useAutoPolling({ interval = 5000, enabled = true, onPoll, fireImmediately = true }: UseAutoPollingOptions) {
   const [isPolling, setIsPolling] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -61,8 +63,12 @@ export function useAutoPolling({ interval = 5000, enabled = true, onPoll }: UseA
       }, backoff);
     };
 
-    poll().then(() => scheduleNext());
-  }, [interval, enabled]);
+    if (fireImmediately) {
+      poll().then(() => scheduleNext());
+    } else {
+      scheduleNext();
+    }
+  }, [interval, enabled, fireImmediately]);
 
   // Handle visibility change (pause when tab is hidden)
   useEffect(() => {
