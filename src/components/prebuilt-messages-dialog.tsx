@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { X, Search, Mic } from 'lucide-react';
+import { X, Search, Mic, ImageIcon, Video } from 'lucide-react';
 import type { PrebuiltMessage } from '@/lib/providers/types';
 
 type Props = {
@@ -8,6 +8,20 @@ type Props = {
   messages: PrebuiltMessage[];
   onSelect: (message: PrebuiltMessage) => void;
 };
+
+type MediaMeta = {
+  icon: typeof Mic;
+  bg: string;
+  color: string;
+  subtext: string;
+};
+
+function getMediaMeta(type: PrebuiltMessage['type']): MediaMeta | null {
+  if (type === 'audio') return { icon: Mic,       bg: '#e9fbe5', color: '#00a884', subtext: 'Voice message' };
+  if (type === 'image') return { icon: ImageIcon, bg: '#e3f2fd', color: '#1976d2', subtext: 'Image' };
+  if (type === 'video') return { icon: Video,     bg: '#f3e5f5', color: '#7b1fa2', subtext: 'Video' };
+  return null;
+}
 
 export function PrebuiltMessagesDialog({ open, onOpenChange, messages, onSelect }: Props) {
   const [search, setSearch] = useState('');
@@ -31,12 +45,14 @@ export function PrebuiltMessagesDialog({ open, onOpenChange, messages, onSelect 
 
   if (!open) return null;
 
+  const isTextType = (m: PrebuiltMessage) => !m.type || m.type === 'text';
+
   const filtered = search.trim()
     ? messages.filter(
         m =>
           m.label.toLowerCase().includes(search.toLowerCase()) ||
-          // only search text content for text messages (audio content is base64)
-          ((!m.type || m.type === 'text') && m.content.toLowerCase().includes(search.toLowerCase())),
+          // only search content for text messages — base64 media content is never searched
+          (isTextType(m) && m.content.toLowerCase().includes(search.toLowerCase())),
       )
     : messages;
 
@@ -109,7 +125,7 @@ export function PrebuiltMessagesDialog({ open, onOpenChange, messages, onSelect 
             </p>
           ) : (
             filtered.map(msg => {
-              const isAudio = msg.type === 'audio';
+              const meta = getMediaMeta(msg.type);
               return (
                 <button
                   key={msg.id}
@@ -132,18 +148,18 @@ export function PrebuiltMessagesDialog({ open, onOpenChange, messages, onSelect 
                   onMouseOver={e => { (e.currentTarget as HTMLButtonElement).style.background = '#f5f5f5'; }}
                   onMouseOut={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none'; }}
                 >
-                  {isAudio && (
+                  {meta && (
                     <div style={{
                       width: 36,
                       height: 36,
                       borderRadius: '50%',
-                      background: '#e9fbe5',
+                      background: meta.bg,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       flexShrink: 0,
                     }}>
-                      <Mic style={{ width: 18, height: 18, color: '#00a884' }} />
+                      <meta.icon style={{ width: 18, height: 18, color: meta.color }} />
                     </div>
                   )}
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -151,7 +167,7 @@ export function PrebuiltMessagesDialog({ open, onOpenChange, messages, onSelect 
                       {msg.label}
                     </p>
                     <p style={{ fontSize: 13, color: '#667781', margin: '2px 0 0', lineHeight: 1.4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const }}>
-                      {isAudio ? 'Voice message' : msg.content}
+                      {meta ? meta.subtext : msg.content}
                     </p>
                   </div>
                 </button>

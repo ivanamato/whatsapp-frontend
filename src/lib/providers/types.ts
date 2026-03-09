@@ -13,9 +13,14 @@ export type PrebuiltMessage = {
    * For type='audio': base64-encoded audio data sent as a PTT voice message.
    */
   content: string;
-  /** 'text' (default) fills the composer; 'audio' sends immediately as a PTT voice message */
-  type?: 'text' | 'audio';
-  /** For type='audio': MIME type of the audio (e.g. 'audio/ogg'). Defaults to 'audio/ogg' */
+  /**
+   * 'text' (default) fills the composer.
+   * 'audio' sends immediately as a PTT voice note.
+   * 'image' sends immediately as an image.
+   * 'video' sends immediately as a video.
+   */
+  type?: 'text' | 'audio' | 'image' | 'video';
+  /** For media types: MIME type (e.g. 'audio/ogg', 'image/jpeg', 'video/mp4'). Defaults per type. */
   mimeType?: string;
 };
 

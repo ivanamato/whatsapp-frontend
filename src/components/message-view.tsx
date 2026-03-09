@@ -177,6 +177,7 @@ export function MessageView({ conversationId, phoneNumber, contactName, profileP
     cancelRecording,
     sendPastedFile,
     sendPrebuiltAudio,
+    sendPrebuiltMedia,
   } = thread;
 
   const [pasteModal, setPasteModal] = useState<{ file: File; url: string } | null>(null);
@@ -228,8 +229,12 @@ export function MessageView({ conversationId, phoneNumber, contactName, profileP
       requestAnimationFrame(() => textareaRef.current?.focus());
     } else if (msg.type === 'audio') {
       sendPrebuiltAudio(msg.content, msg.mimeType ?? 'audio/ogg');
+    } else if (msg.type === 'image') {
+      sendPrebuiltMedia(msg.content, 'image', msg.mimeType ?? 'image/jpeg', msg.label);
+    } else if (msg.type === 'video') {
+      sendPrebuiltMedia(msg.content, 'video', msg.mimeType ?? 'video/mp4', msg.label);
     }
-  }, [setMessageInput, sendPrebuiltAudio]);
+  }, [setMessageInput, sendPrebuiltAudio, sendPrebuiltMedia]);
 
   // Auto-resize textarea as content changes
   useEffect(() => {

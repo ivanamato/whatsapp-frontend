@@ -452,6 +452,53 @@ export function useMessageThread({
     }
   }, [phoneNumber, instance, sending, provider, fetchInitialMessages, onMessageSent, isNearBottomRef]);
 
+  const sendPrebuiltMedia = useCallback(async (
+    base64: string,
+    mediaType: 'image' | 'video',
+    mimeType: string,
+    label: string,
+  ) => {
+    if (!phoneNumber || !instance || sending) return;
+    const filename = mediaType === 'image' ? 'image.jpg' : 'video.mp4';
+    const optimisticId = `optimistic-${Date.now()}`;
+    const optimisticMessage: Message = {
+      id: optimisticId,
+      direction: 'outbound',
+      content: label,
+      createdAt: new Date().toISOString(),
+      status: 'pending',
+      phoneNumber,
+      hasMedia: true,
+      messageType: mediaType,
+      caption: null,
+      reactionEmoji: null,
+      reactedToMessageId: null,
+      filename,
+      mimeType,
+    };
+    setMessages(prev => [...prev, optimisticMessage]);
+    isNearBottomRef.current = true;
+    setSending(true);
+    try {
+      await provider.sendMedia(instance, {
+        to: phoneNumber,
+        mediaType,
+        media: base64,
+        fileName: filename,
+        mimeType,
+      });
+      await fetchInitialMessages();
+      onMessageSent?.();
+    } catch (error) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.error('Error sending prebuilt media:', error instanceof Error ? error.message : String(error));
+      }
+      setMessages(prev => prev.map(m => (m.id === optimisticId ? { ...m, status: 'failed' } : m)));
+    } finally {
+      setSending(false);
+    }
+  }, [phoneNumber, instance, sending, provider, fetchInitialMessages, onMessageSent, isNearBottomRef]);
+
   // ─── Voice recording ────────────────────────────────────────────────────
 
   const stopRecordingCleanup = useCallback(() => {
@@ -626,5 +673,6 @@ export function useMessageThread({
     cancelRecording,
     sendPastedFile,
     sendPrebuiltAudio,
+    sendPrebuiltMedia,
   };
 }

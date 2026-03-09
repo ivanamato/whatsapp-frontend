@@ -2,7 +2,11 @@ import { test, expect } from '@playwright/test';
 import { ConversationListPage } from './pages/conversation-list.page';
 import { MessageThreadPage } from './pages/message-thread.page';
 
-// Mock device 1 has 4 prebuilt messages: 3 text (greeting, followup, closing) + 1 audio (voice-greeting).
+// Mock device 1 has 6 prebuilt messages:
+//   3 text (greeting, followup, closing)
+//   1 audio (voice-greeting)
+//   1 image (promo-image)
+//   1 video (product-video)
 // Mock device 2 has no prebuilt messages.
 // See devices.json for the fixture data.
 
@@ -32,12 +36,14 @@ test.describe('Pre-built messages', () => {
     await thread.openPrebuiltMessages();
     await expect(thread.prebuiltMessagesDialog).toBeVisible();
 
-    // 3 text + 1 audio from devices.json mock-device-1
+    // 3 text + 1 audio + 1 image + 1 video from devices.json mock-device-1
     await expect(thread.prebuiltMessageItem('greeting')).toBeVisible();
     await expect(thread.prebuiltMessageItem('followup')).toBeVisible();
     await expect(thread.prebuiltMessageItem('closing')).toBeVisible();
     await expect(thread.prebuiltMessageItem('voice-greeting')).toBeVisible();
-    await expect(thread.allPrebuiltMessageItems()).toHaveCount(4);
+    await expect(thread.prebuiltMessageItem('promo-image')).toBeVisible();
+    await expect(thread.prebuiltMessageItem('product-video')).toBeVisible();
+    await expect(thread.allPrebuiltMessageItems()).toHaveCount(6);
   });
 
   test('selecting a prebuilt message fills the input and closes the dialog', async () => {
@@ -120,5 +126,60 @@ test.describe('Pre-built messages', () => {
     // Base64 content should not match other searches
     await searchInput.fill('T2dn');
     await expect(thread.prebuiltMessageItem('voice-greeting')).not.toBeVisible();
+  });
+
+  test('image prebuilt message shows type indicator and "Image" subtext', async () => {
+    await thread.openPrebuiltMessages();
+
+    const imageItem = thread.prebuiltMessageItem('promo-image');
+    await expect(imageItem).toBeVisible();
+    await expect(imageItem).toHaveAttribute('data-message-type', 'image');
+    await expect(imageItem).toContainText('Image');
+    await expect(imageItem).toContainText('Promo Image');
+  });
+
+  test('video prebuilt message shows type indicator and "Video" subtext', async () => {
+    await thread.openPrebuiltMessages();
+
+    const videoItem = thread.prebuiltMessageItem('product-video');
+    await expect(videoItem).toBeVisible();
+    await expect(videoItem).toHaveAttribute('data-message-type', 'video');
+    await expect(videoItem).toContainText('Video');
+    await expect(videoItem).toContainText('Product Video');
+  });
+
+  test('selecting an image prebuilt message sends an outbound bubble without changing the input', async () => {
+    const initialBubbleCount = await thread.outboundBubbles().count();
+
+    await thread.openPrebuiltMessages();
+    await thread.prebuiltMessageItem('promo-image').click();
+
+    await expect(thread.prebuiltMessagesDialog).not.toBeVisible();
+    await expect(thread.messageInput).toHaveValue('');
+    await expect(thread.outboundBubbles()).toHaveCount(initialBubbleCount + 1, { timeout: 10000 });
+  });
+
+  test('selecting a video prebuilt message sends an outbound bubble without changing the input', async () => {
+    const initialBubbleCount = await thread.outboundBubbles().count();
+
+    await thread.openPrebuiltMessages();
+    await thread.prebuiltMessageItem('product-video').click();
+
+    await expect(thread.prebuiltMessagesDialog).not.toBeVisible();
+    await expect(thread.messageInput).toHaveValue('');
+    await expect(thread.outboundBubbles()).toHaveCount(initialBubbleCount + 1, { timeout: 10000 });
+  });
+
+  test('media items are not matched by base64 search', async () => {
+    await thread.openPrebuiltMessages();
+    const searchInput = thread.page.locator('[data-testid="prebuilt-messages-search"]');
+
+    // PNG base64 header — should NOT match the image item
+    await searchInput.fill('iVBOR');
+    await expect(thread.prebuiltMessageItem('promo-image')).not.toBeVisible();
+
+    // MP4 base64 header — should NOT match the video item
+    await searchInput.fill('AAAAHG');
+    await expect(thread.prebuiltMessageItem('product-video')).not.toBeVisible();
   });
 });
