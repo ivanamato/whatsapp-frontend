@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useCallback, useState } from 'react';
 import { format, isValid, isToday, isYesterday } from 'date-fns';
-import { RefreshCw, Paperclip, Send, X, AlertCircle, MessageSquare, XCircle, ListTree, ArrowLeft, Loader2, Clock, Mic, Square } from 'lucide-react';
+import { RefreshCw, Paperclip, Send, X, AlertCircle, MessageSquare, XCircle, ListTree, ArrowLeft, Loader2, Clock, Mic, Square, BookText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { MediaMessage } from '@/components/media-message';
 import { AudioPlayer } from '@/components/audio-player';
@@ -9,13 +9,14 @@ import { InteractiveMessageDialog } from '@/components/interactive-message-dialo
 import { MessageContextMenu } from '@/components/message-context-menu';
 import { ForwardMessageDialog } from '@/components/forward-message-dialog';
 import { ImagePasteModal } from '@/components/image-paste-modal';
+import { PrebuiltMessagesDialog } from '@/components/prebuilt-messages-dialog';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useTranslations } from '@/lib/i18n';
 import { useMessageThread, getDisabledInputMessage } from '@/use-cases/use-message-thread';
-import type { Message, WhatsAppProvider } from '@/lib/providers/types';
+import type { Message, WhatsAppProvider, PrebuiltMessage } from '@/lib/providers/types';
 import { sanitizeUrl, sanitizeDisplayFilename } from '@/lib/url-utils';
 import { getAvatarInitials } from '@/lib/avatar-utils';
 
@@ -111,9 +112,10 @@ type Props = {
   readOnly?: boolean;
   providerOverride?: WhatsAppProvider;
   prefillToken?: { id: number; message: string } | null;
+  prebuiltMessages?: PrebuiltMessage[];
 };
 
-export function MessageView({ conversationId, phoneNumber, contactName, profilePicUrl, onTemplateSent, onMessageSent, onBack, isVisible = false, instance, provider: providerType, readOnly = false, providerOverride, prefillToken }: Props) {
+export function MessageView({ conversationId, phoneNumber, contactName, profilePicUrl, onTemplateSent, onMessageSent, onBack, isVisible = false, instance, provider: providerType, readOnly = false, providerOverride, prefillToken, prebuiltMessages }: Props) {
   const t = useTranslations();
 
   // DOM refs — scroll management stays in the presenter
@@ -177,6 +179,7 @@ export function MessageView({ conversationId, phoneNumber, contactName, profileP
   } = thread;
 
   const [pasteModal, setPasteModal] = useState<{ file: File; url: string } | null>(null);
+  const [showPrebuiltMessages, setShowPrebuiltMessages] = useState(false);
 
   const isRecording = recordingState === 'recording' || recordingState === 'processing';
   const showMicButton = !isRecording && !messageInput.trim() && !selectedFile;
@@ -217,6 +220,11 @@ export function MessageView({ conversationId, phoneNumber, contactName, profileP
       setPasteModal(null);
     }
   }, [pasteModal]);
+
+  const handlePrebuiltSelect = useCallback((content: string) => {
+    setMessageInput(content);
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  }, [setMessageInput]);
 
   // Auto-resize textarea as content changes
   useEffect(() => {
@@ -754,6 +762,20 @@ export function MessageView({ conversationId, phoneNumber, contactName, profileP
               >
                 <ListTree className="wa:h-[22px] wa:w-[22px]" />
               </Button>
+              {prebuiltMessages && prebuiltMessages.length > 0 && (
+                <Button
+                  data-testid="prebuilt-messages-button"
+                  type="button"
+                  onClick={() => setShowPrebuiltMessages(true)}
+                  disabled={sending}
+                  size="icon"
+                  variant="ghost"
+                  className="wa:text-[#54656f] hover:wa:bg-transparent hover:wa:text-[#111b21] wa:h-[42px] wa:w-[42px] wa:flex-shrink-0"
+                  title="Pre-built messages"
+                >
+                  <BookText className="wa:h-[22px] wa:w-[22px]" />
+                </Button>
+              )}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <textarea
                   ref={textareaRef}
@@ -873,6 +895,15 @@ export function MessageView({ conversationId, phoneNumber, contactName, profileP
           imageUrl={pasteModal.url}
           onSend={handlePasteModalSend}
           onCancel={handlePasteModalCancel}
+        />
+      )}
+
+      {prebuiltMessages && prebuiltMessages.length > 0 && (
+        <PrebuiltMessagesDialog
+          open={showPrebuiltMessages}
+          onOpenChange={setShowPrebuiltMessages}
+          messages={prebuiltMessages}
+          onSelect={handlePrebuiltSelect}
         />
       )}
     </div>

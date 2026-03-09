@@ -4,6 +4,14 @@ export type ProviderType = 'evolution' | 'cloud';
 
 export type ViewMode = 'single' | 'all';
 
+export type PrebuiltMessage = {
+  id: string;
+  /** Short label shown in the picker list */
+  label: string;
+  /** The text that fills the composer when selected */
+  content: string;
+};
+
 export type DeviceConfig = {
   id: string;
   label?: string;
@@ -13,6 +21,8 @@ export type DeviceConfig = {
   instanceName: string;
   providerType?: ProviderType;
   readonly?: boolean;
+  /** Optional list of pre-built messages available in the composer for this device */
+  prebuiltMessages?: PrebuiltMessage[];
 };
 
 export type ChatAction = {

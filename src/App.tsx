@@ -5,7 +5,7 @@ import { InstanceSelector } from '@/components/instance-selector';
 import { ConnectionStatus } from '@/components/connection-status';
 import { useDeviceContext } from '@/lib/provider-context';
 import { useAppState } from '@/use-cases/use-app-state';
-import type { ChatActionsResolver, ChatTagsResolver, BulkChatTagsResolver } from '@/lib/providers/types';
+import type { ChatActionsResolver, ChatTagsResolver, BulkChatTagsResolver, PrebuiltMessage } from '@/lib/providers/types';
 import type { RefObject } from 'react';
 
 type AppProps = {
@@ -18,6 +18,7 @@ type AppProps = {
 
 export function App({ conversationListRef: externalRef, chatActions, chatTags, chatTagsBulk, prefillToken }: AppProps = {}) {
   const { selectedDevice, viewMode } = useDeviceContext();
+  const prebuiltMessages: PrebuiltMessage[] | undefined = selectedDevice?.prebuiltMessages;
   const internalRef = useRef<ConversationListRef>(null);
   const conversationListRef = externalRef || internalRef;
 
@@ -86,6 +87,7 @@ export function App({ conversationListRef: externalRef, chatActions, chatTags, c
           readOnly={effectiveReadOnly}
           providerOverride={providerOverride}
           prefillToken={prefillToken}
+          prebuiltMessages={prebuiltMessages}
         />
         </div>
       </div>

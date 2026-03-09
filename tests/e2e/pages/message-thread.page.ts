@@ -14,6 +14,8 @@ export class MessageThreadPage {
   readonly imagePasteCaption: Locator;
   readonly imagePasteSend: Locator;
   readonly imagePasteCancel: Locator;
+  readonly prebuiltMessagesButton: Locator;
+  readonly prebuiltMessagesDialog: Locator;
 
   constructor(private page: Page) {
     this.root = page.locator('[data-testid="message-thread"]');
@@ -29,6 +31,8 @@ export class MessageThreadPage {
     this.imagePasteCaption = page.locator('[data-testid="image-paste-caption"]');
     this.imagePasteSend = page.locator('[data-testid="image-paste-send"]');
     this.imagePasteCancel = page.locator('[data-testid="image-paste-cancel"]');
+    this.prebuiltMessagesButton = page.locator('[data-testid="prebuilt-messages-button"]');
+    this.prebuiltMessagesDialog = page.locator('[data-testid="prebuilt-messages-dialog"]');
   }
 
   /** Wait until the thread is visible and at least one message bubble is rendered. */
@@ -77,6 +81,20 @@ export class MessageThreadPage {
   async sendMessage(text: string) {
     await this.messageInput.fill(text);
     await this.messageInput.press('Enter');
+  }
+
+  async openPrebuiltMessages() {
+    await this.prebuiltMessagesButton.click();
+  }
+
+  /** Locator for a specific prebuilt message item by its id. */
+  prebuiltMessageItem(id: string): Locator {
+    return this.page.locator(`[data-testid="prebuilt-message-item"][data-message-id="${id}"]`);
+  }
+
+  /** All prebuilt message items in the dialog. */
+  allPrebuiltMessageItems(): Locator {
+    return this.page.locator('[data-testid="prebuilt-message-item"]');
   }
 
   /**
