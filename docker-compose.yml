@@ -1,0 +1,22 @@
+services:
+  mock-server:
+    build: .
+    command: npx tsx mock-server/index.ts
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      MOCK_PORT: "3002"
+    ports:
+      - "3002:3002"
+
+  frontend:
+    build: .
+    command: npx vite --host 0.0.0.0 --port 5173
+    volumes:
+      - .:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    depends_on:
+      - mock-server

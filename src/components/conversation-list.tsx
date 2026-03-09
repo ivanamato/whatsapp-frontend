@@ -1,35 +1,20 @@
-import { useEffect, useState, useMemo, useRef, forwardRef, useImperativeHandle, useCallback } from 'react';
+import { useRef, forwardRef, useImperativeHandle } from 'react';
 import { format, isValid, isToday, isYesterday } from 'date-fns';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { RefreshCw, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useAutoPolling } from '@/hooks/use-auto-polling';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { useProvider, useDeviceContext } from '@/lib/provider-context';
+import { useDeviceContext } from '@/lib/provider-context';
 import { useTranslations } from '@/lib/i18n';
 import { sanitizeUrl } from '@/lib/url-utils';
 import { getAvatarInitials } from '@/lib/avatar-utils';
-import { ChatActionsTrigger, ChatActionsDialog, type Conversation as ChatActionsConversation } from '@/components/chat-actions-menu';
-import type { ChatActionsResolver, ChatTagsResolver, BulkChatTagsResolver, BulkChatTagsEntry, ChatTag, DeviceConfig } from '@/lib/providers/types';
-
-type Conversation = {
-  id: string;
-  phoneNumber: string;
-  status: string;
-  lastActiveAt: string;
-  contactName?: string;
-  profilePicUrl?: string;
-  lastMessage?: {
-    content: string;
-    direction: string;
-    type?: string;
-  };
-  unreadCount?: number;
-  deviceId?: string;
-  deviceLabel?: string;
-};
+import { ChatActionsTrigger, ChatActionsDialog } from '@/components/chat-actions-menu';
+import { useChatList } from '@/use-cases/use-chat-list';
+import type { Conversation } from '@/use-cases/types';
+import type { ChatActionsResolver, ChatTagsResolver, BulkChatTagsResolver, DeviceConfig } from '@/lib/providers/types';
+import { useState } from 'react';
 
 function formatConversationDate(timestamp: string, yesterdayLabel: string): string {
   try {
@@ -62,295 +47,36 @@ export type ConversationListRef = {
 
 export const ConversationList = forwardRef<ConversationListRef, Props>(
   ({ onSelectConversation, selectedConversationId, isHidden = false, instance, chatActions, chatTags, chatTagsBulk }, ref) => {
-  const provider = useProvider();
-  const { viewMode, devices, getProviderForDevice, selectedDevice } = useDeviceContext();
+  const { viewMode, devices, selectedDevice } = useDeviceContext();
   const t = useTranslations();
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const [dialogTarget, setDialogTarget] = useState<{ conversation: Conversation; device: DeviceConfig } | null>(null);
-  const [tagMap, setTagMap] = useState<Map<string, ChatTag[]>>(new Map());
-  const [selectedTagIds, setSelectedTagIds] = useState<Set<string>>(new Set());
   const scrollParentRef = useRef<HTMLDivElement>(null);
 
-  const doFetch = useCallback(async (): Promise<Conversation[]> => {
-    if (viewMode === 'all') {
-      // Concurrent pool to avoid saturating the browser connection limit
-      const MAX_CONCURRENT = 3;
-      const results: PromiseSettledResult<Conversation[]>[] = [];
-      const pending: Promise<void>[] = [];
+  const {
+    filteredConversations,
+    loading,
+    refreshing,
+    refresh,
+    searchQuery,
+    setSearchQuery,
+    selectedTagIds,
+    toggleTagFilter,
+    availableTags,
+    tagMap,
+    isPolling,
+    findByPhoneNumber,
+  } = useChatList({ instance, chatTags, chatTagsBulk });
 
-      for (const device of devices) {
-        const task = (async () => {
-          try {
-            const deviceProvider = getProviderForDevice(device);
-            const chats = await deviceProvider.findChats(device.instanceName);
-            results.push({
-              status: 'fulfilled',
-              value: chats.map((chat) => ({
-                id: chat.id,
-                phoneNumber: chat.phoneNumber,
-                status: 'active',
-                lastActiveAt: chat.lastActiveAt || '',
-                contactName: chat.contactName,
-                profilePicUrl: chat.profilePicUrl,
-                lastMessage: chat.lastMessage,
-                unreadCount: chat.unreadCount,
-                deviceId: device.id,
-                deviceLabel: device.label || device.instanceName,
-              })),
-            });
-          } catch (reason) {
-            results.push({ status: 'rejected', reason });
-          }
-        })();
-
-        pending.push(task);
-
-        if (pending.length >= MAX_CONCURRENT) {
-          await Promise.race(pending);
-          // Remove settled promises
-          for (let i = pending.length - 1; i >= 0; i--) {
-            const settled = await Promise.race([pending[i].then(() => true), Promise.resolve(false)]);
-            if (settled) pending.splice(i, 1);
-          }
-        }
-      }
-
-      await Promise.all(pending);
-
-      const merged: Conversation[] = [];
-      for (const result of results) {
-        if (result.status === 'fulfilled') {
-          merged.push(...result.value);
-        }
-      }
-      merged.sort((a, b) => {
-        if (!a.lastActiveAt) return 1;
-        if (!b.lastActiveAt) return -1;
-        return new Date(b.lastActiveAt).getTime() - new Date(a.lastActiveAt).getTime();
-      });
-      return merged;
-    }
-
-    // Single mode
-    if (!instance) return [];
-    const chats = await provider.findChats(instance);
-    return chats.map((chat) => ({
-      id: chat.id,
-      phoneNumber: chat.phoneNumber,
-      status: 'active',
-      lastActiveAt: chat.lastActiveAt || '',
-      contactName: chat.contactName,
-      profilePicUrl: chat.profilePicUrl,
-      lastMessage: chat.lastMessage,
-      unreadCount: chat.unreadCount,
-    }));
-  }, [viewMode, devices, getProviderForDevice, instance, provider]);
-
-  const fetchConversations = useCallback(async () => {
-    if (viewMode === 'single' && !instance) {
-      setConversations([]);
-      setLoading(false);
-      return;
-    }
-
-    try {
-      const mapped = await doFetch();
-      setConversations(mapped);
-    } catch (error) {
-      if (process.env.NODE_ENV !== 'production') {
-        console.error('Error fetching conversations:', error instanceof Error ? error.message : String(error));
-      }
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [viewMode, instance, doFetch]);
-
-  const handleRefresh = () => {
-    setRefreshing(true);
-    fetchConversations();
-  };
-
-  const { isPolling } = useAutoPolling({
-    interval: 10000,
-    enabled: viewMode === 'all' || !!instance,
-    onPoll: fetchConversations
-  });
-
-  // Resolve chat tags for all conversations — uses bulk resolver when available (one HTTP call),
-  // falls back to per-item resolver otherwise.
-  useEffect(() => {
-    if (conversations.length === 0) {
-      setTagMap(new Map());
-      return;
-    }
-
-    let cancelled = false;
-
-    if (chatTagsBulk) {
-      // Bulk path: collect all entries and resolve in a single call
-      const bulkEntries: BulkChatTagsEntry[] = [];
-      for (const conv of conversations) {
-        const device = conv.deviceId
-          ? devices.find(d => d.id === conv.deviceId)
-          : selectedDevice;
-        if (!device) continue;
-        const key = conv.deviceId ? `${conv.deviceId}::${conv.id}` : conv.id;
-        bulkEntries.push({
-          key,
-          chat: {
-            id: conv.id,
-            phoneNumber: conv.phoneNumber,
-            contactName: conv.contactName,
-            profilePicUrl: conv.profilePicUrl,
-            lastActiveAt: conv.lastActiveAt,
-            lastMessage: conv.lastMessage ? {
-              content: conv.lastMessage.content,
-              direction: conv.lastMessage.direction as 'inbound' | 'outbound',
-              type: conv.lastMessage.type,
-            } : undefined,
-            unreadCount: conv.unreadCount,
-          },
-          device,
-        });
-      }
-
-      (async () => {
-        try {
-          const result = await chatTagsBulk(bulkEntries);
-          if (!cancelled) setTagMap(result);
-        } catch {
-          // skip
-        }
-      })();
-    } else if (chatTags) {
-      // Per-item fallback path
-      (async () => {
-        const entries: [string, ChatTag[]][] = [];
-        for (const conv of conversations) {
-          const device = conv.deviceId
-            ? devices.find(d => d.id === conv.deviceId)
-            : selectedDevice;
-          if (!device) continue;
-
-          const chat = {
-            id: conv.id,
-            phoneNumber: conv.phoneNumber,
-            contactName: conv.contactName,
-            profilePicUrl: conv.profilePicUrl,
-            lastActiveAt: conv.lastActiveAt,
-            lastMessage: conv.lastMessage ? {
-              content: conv.lastMessage.content,
-              direction: conv.lastMessage.direction as 'inbound' | 'outbound',
-              type: conv.lastMessage.type,
-            } : undefined,
-            unreadCount: conv.unreadCount,
-          };
-
-          try {
-            const tags = await chatTags(chat, device);
-            const key = conv.deviceId ? `${conv.deviceId}::${conv.id}` : conv.id;
-            entries.push([key, tags]);
-          } catch {
-            // skip failed resolutions
-          }
-        }
-
-        if (!cancelled) setTagMap(new Map(entries));
-      })();
-    } else {
-      setTagMap(new Map());
-      return;
-    }
-
-    return () => { cancelled = true; };
-  }, [chatTagsBulk, chatTags, conversations, devices, selectedDevice]);
-
-  const selectByPhoneNumber = (phoneNumber: string) => {
-    const conversation = conversations.find(conv => conv.phoneNumber === phoneNumber);
-    if (conversation) {
-      onSelectConversation(conversation);
-    }
-  };
+  const handleRefresh = () => { refresh(); };
 
   useImperativeHandle(ref, () => ({
-    refresh: async () => {
-      if (viewMode === 'single' && !instance) return [];
-      setRefreshing(true);
-      try {
-        const mapped = await doFetch();
-        setConversations(mapped);
-        setRefreshing(false);
-        return mapped;
-      } catch {
-        setRefreshing(false);
-        return [];
-      }
+    refresh,
+    selectByPhoneNumber: (phoneNumber: string) => {
+      const conversation = findByPhoneNumber(phoneNumber);
+      if (conversation) onSelectConversation(conversation);
     },
-    selectByPhoneNumber
   }));
-
-  // Collect unique tags for filter chips
-  const availableTags = useMemo(() => {
-    const seen = new Map<string, ChatTag>();
-    for (const tags of tagMap.values()) {
-      for (const tag of tags) {
-        if (!seen.has(tag.id)) seen.set(tag.id, tag);
-      }
-    }
-    return Array.from(seen.values());
-  }, [tagMap]);
-
-  // Clear stale tag selections when available tags change
-  useEffect(() => {
-    if (selectedTagIds.size === 0) return;
-    const validIds = new Set(availableTags.map(t => t.id));
-    const pruned = new Set([...selectedTagIds].filter(id => validIds.has(id)));
-    if (pruned.size !== selectedTagIds.size) setSelectedTagIds(pruned);
-  }, [availableTags]);
-
-  const toggleTagFilter = useCallback((tagId: string) => {
-    setSelectedTagIds(prev => {
-      const next = new Set(prev);
-      if (next.has(tagId)) next.delete(tagId);
-      else next.add(tagId);
-      return next;
-    });
-  }, []);
-
-  const filteredConversations = useMemo(() => {
-    let result = conversations;
-
-    // Filter by selected tags
-    if (selectedTagIds.size > 0) {
-      result = result.filter(conv => {
-        const key = conv.deviceId ? `${conv.deviceId}::${conv.id}` : conv.id;
-        const tags = tagMap.get(key);
-        if (!tags) return false;
-        const tagIds = new Set(tags.map(t => t.id));
-        for (const id of selectedTagIds) {
-          if (!tagIds.has(id)) return false;
-        }
-        return true;
-      });
-    }
-
-    // Filter by search query
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      result = result.filter((conv) =>
-        conv.phoneNumber.toLowerCase().includes(query) ||
-        conv.contactName?.toLowerCase().includes(query) ||
-        conv.deviceLabel?.toLowerCase().includes(query)
-      );
-    }
-
-    return result;
-  }, [conversations, searchQuery, selectedTagIds, tagMap]);
 
   const rowVirtualizer = useVirtualizer({
     count: filteredConversations.length,
@@ -401,7 +127,7 @@ export const ConversationList = forwardRef<ConversationListRef, Props>(
   }
 
   return (
-    <div className={cn(
+    <div data-testid="conversation-list" className={cn(
       "wa-sidebar wa:w-full wa:border-r wa:border-[#e9edef] wa:bg-white wa:flex wa:flex-col",
       isHidden && "wa-sidebar--hidden"
     )}>
@@ -441,6 +167,7 @@ export const ConversationList = forwardRef<ConversationListRef, Props>(
               )} />
             </div>
             <input
+              data-testid="search-input"
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -504,6 +231,8 @@ export const ConversationList = forwardRef<ConversationListRef, Props>(
               return (
                 <button
                   key={compositeKey}
+                  data-testid="chat-item"
+                  data-chat-name={conversation.contactName || conversation.phoneNumber}
                   data-index={virtualRow.index}
                   ref={rowVirtualizer.measureElement}
                   onClick={() => onSelectConversation(conversation)}
@@ -589,14 +318,14 @@ export const ConversationList = forwardRef<ConversationListRef, Props>(
                           <span />
                         )}
                         {conversation.unreadCount != null && conversation.unreadCount > 0 && (
-                          <span className="wa:flex-shrink-0 wa:bg-[#00a884] wa:text-white wa:text-[11px] wa:font-bold wa:rounded-full wa:min-w-[20px] wa:h-[20px] wa:flex wa:items-center wa:justify-center wa:px-1">
+                          <span data-testid="unread-badge" className="wa:flex-shrink-0 wa:bg-[#00a884] wa:text-white wa:text-[11px] wa:font-bold wa:rounded-full wa:min-w-[20px] wa:h-[20px] wa:flex wa:items-center wa:justify-center wa:px-1">
                             {conversation.unreadCount}
                           </span>
                         )}
                       </div>
                     </div>
                   </div>
-                  {chatActions && (() => {
+                  {(() => {
                     const device = conversation.deviceId
                       ? devices.find(d => d.id === conversation.deviceId)
                       : selectedDevice;
@@ -614,7 +343,7 @@ export const ConversationList = forwardRef<ConversationListRef, Props>(
       </div>
 
       {/* Chat actions dialog — rendered outside the button tree */}
-      {dialogTarget && chatActions && (
+      {dialogTarget && (
         <ChatActionsDialog
           open={!!dialogTarget}
           onClose={() => setDialogTarget(null)}

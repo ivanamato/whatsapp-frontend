@@ -36,6 +36,7 @@ function toChat(conversation: Conversation): Chat {
 export function ChatActionsTrigger({ onOpen }: { onOpen: () => void }) {
   return (
     <div
+      data-testid="chat-menu-trigger"
       role="button"
       tabIndex={0}
       onClick={(e) => {
@@ -60,7 +61,7 @@ export function ChatActionsDialog({
 }: {
   open: boolean;
   onClose: () => void;
-  resolver: ChatActionsResolver;
+  resolver?: ChatActionsResolver;
   conversation: Conversation;
   device: DeviceConfig;
 }) {
@@ -70,6 +71,12 @@ export function ChatActionsDialog({
 
   useEffect(() => {
     if (!open) return;
+
+    if (!resolver) {
+      setActions([]);
+      setLoading(false);
+      return;
+    }
 
     let cancelled = false;
     setLoading(true);
@@ -127,6 +134,7 @@ export function ChatActionsDialog({
 
       {/* Panel */}
       <div
+        data-testid="chat-actions-panel"
         style={{
           position: 'relative',
           background: 'white',
@@ -140,6 +148,7 @@ export function ChatActionsDialog({
       >
         {/* Close button */}
         <button
+          data-testid="chat-actions-close"
           onClick={onClose}
           style={{
             position: 'absolute',
@@ -170,11 +179,11 @@ export function ChatActionsDialog({
             </AvatarFallback>
           </Avatar>
           <div>
-            <div style={{ fontSize: 17, fontWeight: 600, color: '#111b21', lineHeight: '22px' }}>
+            <div data-testid="chat-actions-contact-name" style={{ fontSize: 17, fontWeight: 600, color: '#111b21', lineHeight: '22px' }}>
               {conversation.contactName || conversation.phoneNumber}
             </div>
             {conversation.contactName && (
-              <div style={{ fontSize: 13, color: '#667781', lineHeight: '18px' }}>
+              <div data-testid="chat-actions-phone-number" style={{ fontSize: 13, color: '#667781', lineHeight: '18px' }}>
                 {conversation.phoneNumber}
               </div>
             )}
@@ -199,6 +208,8 @@ export function ChatActionsDialog({
           {!loading && !error && actions.map((action) => (
             <button
               key={action.id}
+              data-testid="chat-action-button"
+              data-action-id={action.id}
               onClick={() => {
                 action.onClick(toChat(conversation), device);
                 onClose();

@@ -335,8 +335,9 @@ The resolver and each action's `onClick` receive two arguments:
 
 ### Behavior
 
-- A three-dot icon appears on the right side of every chat row when `chatActions` is defined
+- A three-dot icon (⋮) always appears on the right side of every chat row, regardless of whether `chatActions` is configured
 - Clicking it opens a centered dialog with the contact's profile picture, name, phone number, and device name
+- Custom action buttons are shown below the contact info only when a `chatActions` resolver is provided
 - While the resolver is running, a loading spinner is displayed
 - If the resolver throws, an error message is shown in the dialog
 - Each resolved action renders as a full-width button in the dialog
@@ -423,23 +424,21 @@ Each instance in the response has a `token` field — use that as `instanceToken
 
 See the [`examples/`](./examples) directory:
 
-- **[`examples/vue3/`](./examples/vue3)** — Vue 3 Composition API integration with a config form and localStorage persistence
+- **[`examples/vue3/`](./examples/vue3)** — Vue 3 Composition API integration with chat tags, async chat actions, imperative API demos, and full Brazilian/international fixture data
 
-To run the Vue 3 example:
+To run the Vue 3 example against the mock server:
 
 ```bash
-make build
-# Serve the project root with any HTTP server
-python3 -m http.server 8000
-# Open http://localhost:8000/examples/vue3/
+make docker        # start frontend (5173) + mock server (3002)
+make example-vue3  # build library + serve example at http://localhost:5174/examples/vue3/
 ```
 
 ## Development
 
 ### Prerequisites
 
-- Node.js 18+
-- An [Evolution API](https://doc.evolution-api.com/) instance with CORS enabled (`CORS_ORIGIN=*`)
+- Node.js 20+
+- An [Evolution API](https://doc.evolution-api.com/) instance with CORS enabled (`CORS_ORIGIN=*`), **or** use the built-in mock server (no real API needed)
 
 ### Setup
 
@@ -447,7 +446,31 @@ python3 -m http.server 8000
 make install
 ```
 
-Create a `devices.json` file in the project root (see [`devices.example.json`](./devices.example.json)):
+### Running with the mock server (no real API needed)
+
+The fastest way to get started. Starts a local Evolution API mock on port 3002 and the Vite dev server on port 5173 — no credentials required.
+
+**With Docker (recommended):**
+
+```bash
+make docker        # Build images and start in detached mode
+# Open http://localhost:5173
+make docker-restart  # Rebuild and restart (after code changes)
+make docker-down     # Stop the stack
+```
+
+**Without Docker:**
+
+```bash
+make mock          # Starts mock server + Vite dev server concurrently
+# Open http://localhost:5173
+```
+
+Both modes use `devices.json` pre-configured to point at `http://localhost:3002` with two mock instances (`MOCK1` and `MOCK2`).
+
+### Running with a real Evolution API
+
+Replace `devices.json` with your real credentials:
 
 ```json
 {
@@ -463,15 +486,30 @@ Create a `devices.json` file in the project root (see [`devices.example.json`](.
 }
 ```
 
+Then run:
+
+```bash
+make dev
+```
+
 ### Commands
 
 ```bash
-make dev             # Start Vite dev server
+make install         # Install dependencies
+make dev             # Start Vite dev server (reads devices.json)
 make build           # Build library → dist/
 make preview         # Preview the built library
 make lint            # Run ESLint
 make typecheck       # Run TypeScript type check
 make clean           # Remove dist/ and node_modules/
+make test            # Run unit tests (Vitest)
+make test-e2e        # Run e2e tests — requires: make docker
+make example-vue3    # Build library + serve Vue 3 example at localhost:5174 — requires: make docker
+make mock            # Start mock server + dev server locally (no Docker)
+make docker          # Start full stack with Docker Compose
+make docker-build    # Rebuild Docker images from scratch
+make docker-down     # Stop Docker Compose stack
+make docker-restart  # Stop, rebuild, and restart Docker Compose stack
 just release-minor   # Bump minor, push tag, create release → publishes to npm
 just release-major   # Bump major, push tag, create release → publishes to npm
 ```
@@ -515,6 +553,16 @@ src/
     provider-context.tsx    # Preact context for multi-device state
   hooks/
     use-auto-polling.ts     # Polling hook with visibility detection
+  use-cases/
+    use-app-state.ts        # Top-level app state (selected conversation, device)
+    use-chat-list.ts        # Chat list fetching and polling
+    use-message-thread.ts   # Message thread, sending, optimistic updates
+    use-device-status.ts    # Connection status polling
+mock-server/
+  index.ts                  # Entry point (serves on MOCK_PORT, default 3002)
+  app.ts                    # Hono router — all Evolution API routes
+  fixtures.ts               # Per-instance fixture data (MOCK1, MOCK2)
+  store.ts                  # In-memory state (sent messages, media, contacts, unread)
 ```
 
 ### Key Patterns
@@ -525,6 +573,64 @@ src/
 - **Preact with compat** — Uses Preact with `preact/compat` so all React-ecosystem libraries (Radix UI, lucide-react) work unchanged.
 - **CSS isolation** — Tailwind v4 with `wa:` prefix (e.g. `wa:flex`, `wa:p-4`). CSS variables namespaced as `--wa-*`.
 - **JID/LID deduplication** — Merges phone-based JIDs and anonymous Logical IDs using `remoteJidAlt`.
+- **Optimistic sends** — Messages appear immediately in the thread with a pending status; the chat list refreshes after the send resolves.
+- **Chat list reactivity** — `ConversationList` exposes a `refresh()` ref method called after sending, template sends, and on mount.
+
+### Mock Server
+
+The mock server (`mock-server/`) is a [Hono](https://hono.dev/) HTTP server that replicates the Evolution API v2 contract. It is used for local development and Docker-based demos — no real WhatsApp credentials needed.
+
+**Implemented endpoints:**
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/instance/connectionState/:instance` | GET | Returns `{ instance: { state: 'open' } }` |
+| `/chat/findChats/:instance` | POST | Returns chat list, dynamically updated with sent messages and unread counts |
+| `/chat/findContacts/:instance` | POST | Returns contacts, merged with dynamically created contacts |
+| `/chat/findMessages/:instance` | POST | Returns paginated messages; marks chat as read (clears unread) |
+| `/chat/getBase64FromMediaMessage/:instance` | POST | Returns stored base64 for sent media; placeholder for fixture media |
+| `/message/sendText/:instance` | POST | Stores message, triggers delivery progression and auto-reply |
+| `/message/sendMedia/:instance` | POST | Stores message + actual base64 payload for later retrieval |
+| `/message/sendButtons/:instance` | POST | Stores button message with full structure |
+| `/chat/deleteMessageForEveryone/:instance` | DELETE | Marks message deleted; emits REVOKE protocol message |
+
+**Realistic behaviors:**
+- **Auth** — Validates `apikey` header; returns 401 for unknown tokens, 404 for unknown instances
+- **Message delivery** — Status progression: `PENDING` → `SERVER_ACK` (300ms) → `DELIVERY_ACK` (1.5s) → `READ` (2–3s)
+- **Auto-reply** — Each sent message triggers an "Example response" reply after 2–3s, from the correct contact name (or a random group participant for group chats)
+- **Chat list updates** — `findChats` dynamically merges fixture chats with store messages, recomputes `lastMessage`, `updatedAt`, and `unreadCount`; sorts by most recent
+- **Unread count** — Increments on incoming messages; resets to 0 when `findMessages` is called for that chat (simulates opening)
+- **New contacts** — Sending to an unknown JID auto-creates a contact entry
+- **Group JID resolution** — Bare numbers (e.g. `120363012345678901`) are matched against known JIDs to restore the correct suffix (`@g.us`, `@s.whatsapp.net`)
+- **Media storage** — Actual base64 payloads are stored by message ID and returned by `getBase64FromMediaMessage`
+- **Message deletion** — Emits a `protocolMessage` REVOKE event so the 5s poller picks up live deletions
+- **Deduplication** — Messages deduplicated by ID to handle LID + phone JID overlaps
+
+**Two mock instances:**
+- `MOCK1` — Brazilian contacts (Ana Beatriz, Carlos Eduardo, Equipe Vendas group, Fernanda Lima, Roberto Mendes)
+- `MOCK2` — International contacts (Sarah Johnson, James Wright, Product Team group, Miguel Torres)
+
+**Docker setup:**
+
+```
+browser → localhost:5173 (Vite frontend)
+       → localhost:3002 (mock-server, direct HTTP — allowed by CSP)
+```
+
+The frontend container volume-mounts the source tree for HMR. A shared `Dockerfile` installs dependencies; source is never copied into the image.
+
+## Publishing
+
+Package is published to [npm](https://www.npmjs.com/package/@ivanamato/whatsapp-inbox) as `@ivanamato/whatsapp-inbox`. A GitHub Actions workflow (`.github/workflows/publish.yml`) automatically builds and publishes on every GitHub Release using Trusted Publishing (OIDC).
+
+- **Release commands:** `just release-minor` or `just release-major` bump the version, push the tag, and create a GitHub release (which triggers the publish workflow). The justfile is gitignored.
+- **`publishConfig`** in `package.json` sets `"access": "public"`.
+
+To install in another project:
+
+```bash
+npm install @ivanamato/whatsapp-inbox
+```
 
 ## License
 

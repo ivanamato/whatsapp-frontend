@@ -57,4 +57,5 @@ devices.json
 next-env.d.ts
 
 # justfile (contains push/release commands)
-justfile
+justfiletest-results/
+playwright-report/

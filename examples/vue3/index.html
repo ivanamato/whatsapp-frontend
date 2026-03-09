@@ -77,24 +77,24 @@
           await nextTick();
 
           const config = {
+            // Mock server — start with: make docker
             "devices": [
               {
-                "id": "device-1",
-                "label": "My WhatsApp",
-                "apiUrl": "https://your-evolution-api.com",
-                "instanceToken": "your-instance-token-1",
-                "instanceName": "my-instance-1",
-                "readonly": true
+                "id": "mock-device-1",
+                "label": "Mock WhatsApp 1 🇧🇷",
+                "apiUrl": "http://localhost:3002",
+                "instanceToken": "mock-token-123",
+                "instanceName": "MOCK1"
               },
               {
-                "id": "device-2",
-                "label": "Support",
-                "apiUrl": "https://your-evolution-api.com",
-                "instanceToken": "your-instance-token-2",
-                "instanceName": "my-instance-2"
+                "id": "mock-device-2",
+                "label": "Mock WhatsApp 2 🌍",
+                "apiUrl": "http://localhost:3002",
+                "instanceToken": "mock-token-456",
+                "instanceName": "MOCK2"
               }
             ],
-            defaultDeviceId: 'device-1',
+            defaultDeviceId: 'mock-device-1',
             translations: {
               // Lista de conversas                               
               'conversationList.chats': 'Conversas',
@@ -279,7 +279,7 @@
         function switchDevice() {
           if (!inboxRef.value) return;
           const current = inboxRef.value.getActiveDevice();
-          const target = current === 'device-1' ? 'device-2' : 'device-1';
+          const target = current === 'mock-device-1' ? 'mock-device-2' : 'mock-device-1';
           inboxRef.value.setActiveDevice(target);
           alert('Switched to ' + target);
         }

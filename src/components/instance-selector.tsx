@@ -1,51 +1,23 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { ChevronDown, WifiOff, Loader2, Check, XIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useAutoPolling } from '@/hooks/use-auto-polling';
 import { Badge } from '@/components/ui/badge';
 import { useDeviceContext } from '@/lib/provider-context';
 import { useTranslations } from '@/lib/i18n';
+import { useDeviceStatus } from '@/use-cases/use-device-status';
 import type { DeviceConfig, ViewMode } from '@/lib/providers/types';
-
-type DeviceStatus = 'open' | 'close' | 'connecting' | 'loading';
+import type { DeviceStatus } from '@/use-cases/use-device-status';
 
 type Props = {
   onDeviceChange: (device: { instanceName: string; provider: 'evolution' | 'cloud' } | null) => void;
 };
 
 export function InstanceSelector({ onDeviceChange }: Props) {
-  const { devices, selectedDevice, selectDevice, getProviderForDevice, viewMode, setViewMode } = useDeviceContext();
+  const { devices, selectedDevice, selectDevice, viewMode, setViewMode } = useDeviceContext();
   const t = useTranslations();
-  const [statuses, setStatuses] = useState<Record<string, DeviceStatus>>({});
   const [open, setOpen] = useState(false);
-  const [initialLoad, setInitialLoad] = useState(true);
 
-  const pollStatuses = useCallback(async () => {
-    const results: Record<string, DeviceStatus> = {};
-    await Promise.all(
-      devices.map(async (device) => {
-        try {
-          const provider = getProviderForDevice(device);
-          const state = await provider.getConnectionState(device.instanceName);
-          results[device.id] = state;
-        } catch {
-          results[device.id] = 'close';
-        }
-      })
-    );
-    setStatuses(results);
-    setInitialLoad(false);
-  }, [devices, getProviderForDevice]);
-
-  useEffect(() => {
-    pollStatuses();
-  }, [pollStatuses]);
-
-  useAutoPolling({
-    interval: 30000,
-    enabled: true,
-    onPoll: pollStatuses,
-  });
+  const { statuses, initialLoad, connectedCount } = useDeviceStatus();
 
   // Notify parent when selected device changes
   useEffect(() => {
@@ -56,16 +28,6 @@ export function InstanceSelector({ onDeviceChange }: Props) {
       });
     }
   }, [selectedDevice, onDeviceChange]);
-
-  // Auto-select first connected device if default isn't connected
-  useEffect(() => {
-    if (!initialLoad && selectedDevice && statuses[selectedDevice.id] !== 'open') {
-      const connected = devices.find(d => statuses[d.id] === 'open');
-      if (connected && connected.id !== selectedDevice.id) {
-        selectDevice(connected.id);
-      }
-    }
-  }, [initialLoad, statuses, devices, selectedDevice, selectDevice]);
 
   if (initialLoad) {
     return (
@@ -85,7 +47,6 @@ export function InstanceSelector({ onDeviceChange }: Props) {
     );
   }
 
-  const connectedCount = devices.filter(d => statuses[d.id] === 'open').length;
   const showToggle = devices.length > 1;
 
   return (

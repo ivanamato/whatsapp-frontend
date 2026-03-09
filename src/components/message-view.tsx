@@ -1,5 +1,5 @@
-import { useEffect, useLayoutEffect, useState, useMemo, useRef, useCallback } from 'react';
-import { format, isValid, isToday, isYesterday, differenceInHours } from 'date-fns';
+import { useEffect, useLayoutEffect, useRef, useCallback } from 'react';
+import { format, isValid, isToday, isYesterday } from 'date-fns';
 import { RefreshCw, Paperclip, Send, X, AlertCircle, MessageSquare, XCircle, ListTree, ArrowLeft, Loader2, Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { MediaMessage } from '@/components/media-message';
@@ -8,42 +8,15 @@ import { TemplateSelectorDialog } from '@/components/template-selector-dialog';
 import { InteractiveMessageDialog } from '@/components/interactive-message-dialog';
 import { MessageContextMenu } from '@/components/message-context-menu';
 import { ForwardMessageDialog } from '@/components/forward-message-dialog';
-import { useAutoPolling } from '@/hooks/use-auto-polling';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { useProvider } from '@/lib/provider-context';
 import { useTranslations } from '@/lib/i18n';
-import type { WhatsAppProvider } from '@/lib/providers/types';
+import { useMessageThread, getDisabledInputMessage } from '@/use-cases/use-message-thread';
+import type { Message, WhatsAppProvider } from '@/lib/providers/types';
 import { sanitizeUrl, sanitizeDisplayFilename } from '@/lib/url-utils';
 import { getAvatarInitials } from '@/lib/avatar-utils';
-
-type Message = {
-  id: string;
-  direction: 'inbound' | 'outbound';
-  content: string;
-  createdAt: string;
-  status?: string;
-  phoneNumber: string;
-  hasMedia: boolean;
-  mediaData?: {
-    url: string;
-    contentType?: string;
-    filename?: string;
-    byteSize?: number;
-  };
-  reactionEmoji?: string | null;
-  reactedToMessageId?: string | null;
-  filename?: string | null;
-  mimeType?: string | null;
-  messageType?: string;
-  caption?: string | null;
-  metadata?: {
-    mediaId?: string;
-  };
-  senderName?: string;
-};
 
 function formatMessageTime(timestamp: string): string {
   try {
@@ -85,55 +58,6 @@ function shouldShowDateDivider(currentMsg: Message, prevMsg: Message | null): bo
   }
 }
 
-function isWithin24HourWindow(messages: Message[]): boolean {
-  const inboundMessages = messages.filter(msg => msg.direction === 'inbound');
-
-  if (inboundMessages.length === 0) {
-    return false;
-  }
-
-  const lastInboundMessage = inboundMessages[inboundMessages.length - 1];
-
-  try {
-    const lastMessageDate = new Date(lastInboundMessage.createdAt);
-    if (!isValid(lastMessageDate)) return false;
-
-    const hoursSinceLastMessage = differenceInHours(new Date(), lastMessageDate);
-    return hoursSinceLastMessage < 24;
-  } catch {
-    return false;
-  }
-}
-
-function getDisabledInputMessage(messages: Message[], noInbound: string, outside24h: string): string {
-  const inboundMessages = messages.filter(msg => msg.direction === 'inbound');
-
-  if (inboundMessages.length === 0) {
-    return noInbound;
-  }
-
-  return outside24h;
-}
-
-function readFileAsBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      const base64 = result.split(',')[1];
-      resolve(base64);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
-function getMediaType(mimeType: string): 'image' | 'video' | 'audio' | 'document' {
-  if (mimeType.startsWith('image/')) return 'image';
-  if (mimeType.startsWith('video/')) return 'video';
-  if (mimeType.startsWith('audio/')) return 'audio';
-  return 'document';
-}
 
 /** Should we show the tail on this bubble? Only on the first message in a consecutive group from the same direction. */
 function shouldShowTail(messages: Message[], index: number): boolean {
@@ -178,6 +102,7 @@ type Props = {
   contactName?: string;
   profilePicUrl?: string;
   onTemplateSent?: (phoneNumber: string) => Promise<void>;
+  onMessageSent?: () => void;
   onBack?: () => void;
   isVisible?: boolean;
   instance?: string;
@@ -186,170 +111,62 @@ type Props = {
   providerOverride?: WhatsAppProvider;
 };
 
-export function MessageView({ conversationId, phoneNumber, contactName, profilePicUrl, onTemplateSent, onBack, isVisible = false, instance, provider: providerType, readOnly = false, providerOverride }: Props) {
-  const contextProvider = useProvider();
-  const provider = providerOverride || contextProvider;
+export function MessageView({ conversationId, phoneNumber, contactName, profilePicUrl, onTemplateSent, onMessageSent, onBack, isVisible = false, instance, provider: providerType, readOnly = false, providerOverride }: Props) {
   const t = useTranslations();
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [messageInput, setMessageInput] = useState('');
-  const [sending, setSending] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [filePreview, setFilePreview] = useState<string | null>(null);
-  const [fileError, setFileError] = useState<string | null>(null);
-  const [canSendRegularMessage, setCanSendRegularMessage] = useState(true);
-  const [showTemplateDialog, setShowTemplateDialog] = useState(false);
-  const [showInteractiveDialog, setShowInteractiveDialog] = useState(false);
-  const [forwardMessage, setForwardMessage] = useState<Message | null>(null);
-  // isNearBottom tracked via ref only — no state to avoid re-render on scroll
-  const [hasMore, setHasMore] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const currentPageRef = useRef(1);
-  const loadingMoreRef = useRef(false);
-  const pendingScrollRestoreRef = useRef<number | null>(null);
+
+  // DOM refs — scroll management stays in the presenter
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<Element | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const previousMessageCountRef = useRef(0);
-  const abortControllerRef = useRef<AbortController | null>(null);
   const isNearBottomRef = useRef(true);
   const scrollRafRef = useRef<number | null>(null);
   const scrollCleanupRef = useRef<(() => void) | null>(null);
+  const pendingScrollRestoreRef = useRef<number | null>(null);
 
-  const isCloudProvider = providerType === 'cloud';
+  const thread = useMessageThread({
+    conversationId,
+    phoneNumber,
+    instance,
+    providerType,
+    providerOverride,
+    onTemplateSent,
+    onMessageSent,
+    isNearBottomRef,
+  });
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  const {
+    messages,
+    loading,
+    refreshing,
+    hasMore,
+    loadingMore,
+    messageInput,
+    setMessageInput,
+    sending,
+    selectedFile,
+    filePreview,
+    fileError,
+    setFileError,
+    canSendRegularMessage,
+    showTemplateDialog,
+    setShowTemplateDialog,
+    showInteractiveDialog,
+    setShowInteractiveDialog,
+    forwardMessage,
+    setForwardMessage,
+    fetchInitialMessages,
+    fetchOlderMessages,
+    handleFileSelect,
+    handleRemoveFile,
+    send,
+    handleTemplateSentInternal,
+    handleRefresh,
+    isCloudProvider,
+    currentPageRef,
+  } = thread;
 
-  /** Apply reactions to messages and sort chronologically */
-  const processMessages = (data: Message[]): Message[] => {
-    const reactions = data.filter((msg) => msg.messageType === 'reaction');
-    const regularMessages = data.filter((msg) => msg.messageType !== 'reaction');
-
-    const reactionMap = new Map<string, string>();
-    reactions.forEach((reaction) => {
-      if (reaction.reactedToMessageId && reaction.reactionEmoji) {
-        reactionMap.set(reaction.reactedToMessageId, reaction.reactionEmoji);
-      }
-    });
-
-    const messagesWithReactions = regularMessages.map((msg) => {
-      const reaction = reactionMap.get(msg.id);
-      return reaction ? { ...msg, reactionEmoji: reaction } : msg;
-    });
-
-    return messagesWithReactions.sort((a, b) => {
-      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-    });
-  };
-
-  /** Fetch page 1 — used for initial load and auto-polling */
-  const fetchInitialMessages = useCallback(async () => {
-    if (!conversationId || !instance) return;
-
-    try {
-      const result = await provider.findMessagesPaginated(instance, conversationId, { page: 1 });
-      const processed = processMessages(result.messages);
-
-      setHasMore(result.pagination.hasMore);
-
-      setMessages(prev => {
-        // Filter out optimistic messages that now have real counterparts
-        const withoutOptimistic = prev.filter(m => !m.id.startsWith('optimistic-'));
-
-        if (currentPageRef.current === 1) {
-          if (withoutOptimistic.length !== processed.length) return processed;
-          const changed = processed.some((msg, i) => msg.id !== withoutOptimistic[i]?.id || msg.status !== withoutOptimistic[i]?.status || msg.reactionEmoji !== withoutOptimistic[i]?.reactionEmoji);
-          return changed ? processed : prev;
-        }
-        // Auto-poll with older pages loaded — merge new page-1 messages with existing older ones
-        const olderMessages = withoutOptimistic.filter(
-          (msg) => !processed.some((p) => p.id === msg.id)
-        );
-        const merged = [...olderMessages, ...processed];
-        merged.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-        const changed = merged.length !== withoutOptimistic.length || merged.some((msg, i) => msg.id !== withoutOptimistic[i]?.id || msg.status !== withoutOptimistic[i]?.status || msg.reactionEmoji !== withoutOptimistic[i]?.reactionEmoji);
-        return changed ? merged : prev;
-      });
-      previousMessageCountRef.current = processed.length;
-    } catch (error) {
-      // Ignore aborted requests
-      if (error instanceof DOMException && error.name === 'AbortError') return;
-      if (process.env.NODE_ENV !== 'production') {
-        console.error('Error fetching messages:', error instanceof Error ? error.message : String(error));
-      }
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [conversationId, instance, provider]);
-
-  /** Fetch older pages when scrolling up */
-  const fetchOlderMessages = useCallback(async () => {
-    if (!conversationId || !instance || !hasMore || loadingMoreRef.current) return;
-
-    const container = messagesContainerRef.current;
-    const viewport = container && typeof container.querySelector === 'function'
-      ? (viewportRef.current || container.querySelector('[data-radix-scroll-area-viewport]'))
-      : viewportRef.current;
-    if (!viewport) return;
-
-    loadingMoreRef.current = true;
-    setLoadingMore(true);
-
-    // Save scroll height before prepending
-    pendingScrollRestoreRef.current = viewport.scrollHeight;
-
-    const nextPage = currentPageRef.current + 1;
-
-    try {
-      const result = await provider.findMessagesPaginated(instance, conversationId, { page: nextPage });
-      const processed = processMessages(result.messages);
-
-      currentPageRef.current = nextPage;
-      setHasMore(result.pagination.hasMore);
-
-      setMessages(prev => {
-        // Deduplicate and prepend older messages
-        const existingIds = new Set(prev.map(m => m.id));
-        const newOlder = processed.filter(m => !existingIds.has(m.id));
-        const merged = [...newOlder, ...prev];
-        merged.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-        return merged;
-      });
-    } catch (error) {
-      if (process.env.NODE_ENV !== 'production') {
-        console.error('Error fetching older messages:', error instanceof Error ? error.message : String(error));
-      }
-      pendingScrollRestoreRef.current = null;
-    } finally {
-      loadingMoreRef.current = false;
-      setLoadingMore(false);
-    }
-  }, [conversationId, instance, provider, hasMore]);
-
-  // Reset pagination state on conversation switch + AbortController
-  useEffect(() => {
-    // Abort any in-flight requests from previous conversation
-    abortControllerRef.current?.abort();
-    abortControllerRef.current = new AbortController();
-
-    currentPageRef.current = 1;
-    setHasMore(false);
-    setMessages([]);
-    setFileError(null);
-    loadingMoreRef.current = false;
-    pendingScrollRestoreRef.current = null;
-    if (conversationId && instance) {
-      setLoading(true);
-      fetchInitialMessages();
-    }
-  }, [conversationId, instance]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Resolve the Radix viewport DOM element from the wrapper div
+  // Resolve the Radix viewport DOM element
   const getViewport = useCallback((): Element | null => {
     if (viewportRef.current) return viewportRef.current;
     const container = messagesContainerRef.current;
@@ -359,61 +176,49 @@ export function MessageView({ conversationId, phoneNumber, contactName, profileP
     return vp;
   }, []);
 
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
   // Scroll restoration after prepending older messages
   useLayoutEffect(() => {
     if (pendingScrollRestoreRef.current === null) return;
     const viewport = getViewport();
     if (!viewport) return;
-
     const prevHeight = pendingScrollRestoreRef.current;
     pendingScrollRestoreRef.current = null;
-    const newHeight = viewport.scrollHeight;
-    viewport.scrollTop += newHeight - prevHeight;
+    viewport.scrollTop += viewport.scrollHeight - prevHeight;
   }, [messages, getViewport]);
 
+  // Auto-scroll to bottom when new messages arrive (if near bottom)
   useEffect(() => {
     if (isNearBottomRef.current && !loadingMore) {
       scrollToBottom();
     }
   }, [messages, loadingMore]);
 
+  // Throttled scroll handler — triggers pagination and tracks near-bottom state
   useEffect(() => {
-    if (isCloudProvider) {
-      setCanSendRegularMessage(isWithin24HourWindow(messages));
-    } else {
-      setCanSendRegularMessage(true);
-    }
-  }, [messages, isCloudProvider]);
-
-  // Throttled scroll handler using rAF — attach after viewport is available
-  useEffect(() => {
-    // Defer to let Radix mount the viewport
     const attachTimer = setTimeout(() => {
       const viewport = getViewport();
       if (!viewport) return;
 
       const handleScroll = () => {
         if (scrollRafRef.current !== null) return;
-
         scrollRafRef.current = requestAnimationFrame(() => {
           scrollRafRef.current = null;
           const vp = viewportRef.current;
           if (!vp) return;
-
           const { scrollTop, scrollHeight, clientHeight } = vp;
-          const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
-          const nearBottom = distanceFromBottom < 100;
-
-          isNearBottomRef.current = nearBottom;
-
-          if (scrollTop < 150 && hasMore && !loadingMoreRef.current) {
+          isNearBottomRef.current = scrollHeight - scrollTop - clientHeight < 100;
+          if (scrollTop < 150 && hasMore) {
+            pendingScrollRestoreRef.current = vp.scrollHeight;
             fetchOlderMessages();
           }
         });
       };
 
       viewport.addEventListener('scroll', handleScroll, { passive: true });
-      // Store cleanup in ref so the outer cleanup can call it
       scrollCleanupRef.current = () => {
         viewport.removeEventListener('scroll', handleScroll);
         if (scrollRafRef.current !== null) {
@@ -430,154 +235,22 @@ export function MessageView({ conversationId, phoneNumber, contactName, profileP
     };
   }, [hasMore, fetchOlderMessages, getViewport]);
 
-  const handleRefresh = () => {
-    setRefreshing(true);
-    fetchInitialMessages();
+  const handleSendMessage = (e: React.FormEvent) => {
+    e.preventDefault();
+    send();
   };
 
-  useAutoPolling({
-    interval: 5000,
-    enabled: !!conversationId && !!instance,
-    onPoll: fetchInitialMessages
-  });
-
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setFileError(null);
-
-    // 16 MB size limit (WhatsApp's actual limit)
-    if (file.size > 16 * 1024 * 1024) {
-      setFileError(t('messageView.fileTooLarge') || 'File exceeds 16 MB limit');
-      e.target.value = '';
-      return;
-    }
-
-    // Validate MIME type beyond the accept attribute (which is a UI hint only)
-    const allowedPrefixes = ['image/', 'video/', 'audio/'];
-    const allowedTypes = [
-      'application/pdf',
-      'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    ];
-    if (
-      !allowedPrefixes.some((p) => file.type.startsWith(p)) &&
-      !allowedTypes.includes(file.type)
-    ) {
-      setFileError(t('messageView.fileTypeNotAllowed') || 'File type not supported');
-      e.target.value = '';
-      return;
-    }
-
-    // Validate magic bytes to prevent MIME-type spoofing for dangerous file types
-    try {
-      const header = new Uint8Array(await file.slice(0, 4).arrayBuffer());
-      const headerText = new TextDecoder().decode(header);
-      // Block files that start with HTML/XML-like content (potential script execution)
-      if (headerText.startsWith('<') || headerText.startsWith('<!')) {
-        setFileError(t('messageView.fileTypeNotAllowed') || 'File type not supported');
-        e.target.value = '';
-        return;
-      }
-    } catch {
-      // If we can't read the file header, allow it (fallback to server-side validation)
-    }
-
-    setSelectedFile(file);
-
-    if (file.type.startsWith('image/')) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setFilePreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    } else {
-      setFilePreview(null);
-    }
-  };
-
-  const handleRemoveFile = () => {
-    setSelectedFile(null);
-    setFilePreview(null);
-    setFileError(null);
-    if (fileInputRef.current) {
+  const handleFileSelectWithReset = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    await handleFileSelect(e);
+    // Reset the input value so the same file can be re-selected
+    if (fileInputRef.current && !e.target.files?.[0]) {
       fileInputRef.current.value = '';
     }
   };
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if ((!messageInput.trim() && !selectedFile) || !phoneNumber || !instance || sending) return;
-
-    const text = messageInput.trim();
-    const file = selectedFile;
-
-    // Optimistic update — show message immediately with pending status
-    const optimisticId = `optimistic-${Date.now()}`;
-    const optimisticMessage: Message = {
-      id: optimisticId,
-      direction: 'outbound',
-      content: file ? (text || file.name) : text,
-      createdAt: new Date().toISOString(),
-      status: 'pending',
-      phoneNumber,
-      hasMedia: !!file,
-      messageType: file ? getMediaType(file.type) : 'text',
-      caption: file && text ? text : null,
-      reactionEmoji: null,
-      reactedToMessageId: null,
-      filename: file?.name || null,
-      mimeType: file?.type || null,
-    };
-
-    setMessages(prev => [...prev, optimisticMessage]);
-    setMessageInput('');
+  const handleRemoveFileWithReset = () => {
     handleRemoveFile();
-    isNearBottomRef.current = true;
-
-    setSending(true);
-    try {
-      if (file) {
-        const base64 = await readFileAsBase64(file);
-        const mediaType = getMediaType(file.type);
-        await provider.sendMedia(instance, {
-          to: phoneNumber,
-          mediaType,
-          media: base64,
-          caption: text || undefined,
-          fileName: file.name.replace(/[\x00-\x1f/\\:*?"<>|]/g, '_').replace(/^\.+/, '_').replace(/[.\s]+$/, '').slice(0, 255) || 'unnamed',
-          mimeType: file.type,
-        });
-      } else {
-        await provider.sendText(instance, {
-          to: phoneNumber,
-          body: text,
-        });
-      }
-
-      // Fetch real messages to reconcile
-      await fetchInitialMessages();
-    } catch (error) {
-      if (process.env.NODE_ENV !== 'production') {
-        console.error('Error sending message:', error instanceof Error ? error.message : String(error));
-      }
-      // Mark optimistic message as failed
-      setMessages(prev => prev.map(m =>
-        m.id === optimisticId ? { ...m, status: 'failed' } : m
-      ));
-    } finally {
-      setSending(false);
-    }
-  };
-
-  const handleTemplateSent = async () => {
-    await fetchInitialMessages();
-
-    if (phoneNumber && onTemplateSent) {
-      await onTemplateSent(phoneNumber);
-    }
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   // Empty state — no conversation selected
@@ -643,7 +316,7 @@ export function MessageView({ conversationId, phoneNumber, contactName, profileP
   }
 
   return (
-    <div className={cn(
+    <div data-testid="message-thread" className={cn(
       "wa:flex-1 wa:flex wa:flex-col wa:min-w-0",
       !isVisible && "wa-content--hidden"
     )}>
@@ -733,6 +406,8 @@ export function MessageView({ conversationId, phoneNumber, contactName, profileP
                   )}
 
                   <div
+                    data-testid="message-bubble"
+                    data-direction={isOutbound ? 'outbound' : 'inbound'}
                     style={showTail ? { marginBottom: 6, marginTop: 6 } : { marginBottom: 6 }}
                     className={cn(
                       'wa:flex wa-msg-bubble',
@@ -829,7 +504,7 @@ export function MessageView({ conversationId, phoneNumber, contactName, profileP
                           ) : message.metadata?.mediaId && message.messageType ? (
                             <div className="wa:mb-1">
                               <MediaMessage
-                                mediaId={message.metadata.mediaId}
+                                mediaId={message.metadata.mediaId as string}
                                 messageType={message.messageType}
                                 caption={message.caption}
                                 filename={message.filename}
@@ -944,7 +619,7 @@ export function MessageView({ conversationId, phoneNumber, contactName, profileP
                     <p className="wa:text-[12px] wa:text-[#667781]">{(selectedFile.size / 1024).toFixed(1)} KB</p>
                   </div>
                   <Button
-                    onClick={handleRemoveFile}
+                    onClick={handleRemoveFileWithReset}
                     type="button"
                     variant="ghost"
                     size="icon"
@@ -960,7 +635,7 @@ export function MessageView({ conversationId, phoneNumber, contactName, profileP
               <input
                 ref={fileInputRef}
                 type="file"
-                onChange={handleFileSelect}
+                onChange={handleFileSelectWithReset}
                 accept="image/*,video/*,audio/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 className="wa:hidden"
               />
@@ -988,6 +663,7 @@ export function MessageView({ conversationId, phoneNumber, contactName, profileP
               </Button>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <input
+                  data-testid="message-input"
                   type="text"
                   value={messageInput}
                   onChange={(e) => setMessageInput(e.target.value)}
@@ -1003,6 +679,7 @@ export function MessageView({ conversationId, phoneNumber, contactName, profileP
                 />
               </div>
               <Button
+                data-testid="send-button"
                 type="submit"
                 disabled={sending || (!messageInput.trim() && !selectedFile)}
                 size="icon"
@@ -1048,7 +725,7 @@ export function MessageView({ conversationId, phoneNumber, contactName, profileP
           open={showTemplateDialog}
           onOpenChange={setShowTemplateDialog}
           phoneNumber={phoneNumber || ''}
-          onTemplateSent={handleTemplateSent}
+          onTemplateSent={handleTemplateSentInternal}
         />
       )}
 

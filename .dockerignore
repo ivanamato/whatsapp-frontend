@@ -1,0 +1,13 @@
+node_modules
+dist
+.git
+devices.json
+.env
+.env.*
+test-results
+coverage
+*.tsbuildinfo
+justfile
+.mcp.json
+.playwright-mcp/
+.claude

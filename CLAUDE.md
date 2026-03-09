@@ -18,6 +18,14 @@ make preview         # Serve built library locally
 make lint            # Run ESLint
 make typecheck       # Run TypeScript type check
 make clean           # Remove dist and node_modules
+make test            # Run unit tests (Vitest)
+make test-e2e        # Run e2e tests — requires: make docker
+make example-vue3    # Build library and serve Vue 3 example at localhost:5174 — requires: make docker
+make mock            # Start mock server + dev server locally (no Docker, no real API)
+make docker          # Start full stack with Docker Compose (detached, with build)
+make docker-build    # Rebuild Docker images from scratch
+make docker-down     # Stop Docker Compose stack
+make docker-restart  # Stop, rebuild, and restart Docker Compose stack
 ```
 
 Release commands live in a gitignored `justfile` (requires [just](https://github.com/casey/just)):
@@ -73,14 +81,33 @@ To add a new provider: implement `WhatsAppProvider`, add a case in `createProvid
 
 Auto-polling via `src/hooks/use-auto-polling.ts` (10s conversations, 5s messages, pauses when tab hidden).
 
+#### Chat list reactivity
+
+`ConversationList` exposes `refresh()` via a ref (`ConversationListRef`). `App.tsx` holds the ref and passes callbacks that call it:
+- `onTemplateSent` — refreshes after a template is sent
+- `onMessageSent` — refreshes immediately after every regular send (text, media, buttons)
+
+`onMessageSent` is threaded through: `App.tsx` → `MessageView` prop → `useMessageThread` hook option → called after `fetchInitialMessages()` resolves.
+
+### Use Cases
+
+Business logic lives in `src/use-cases/`:
+
+- **`use-app-state.ts`** — Top-level state: selected conversation, device switching, keyboard navigation, `onMessageSent` / `onTemplateSent` wiring
+- **`use-chat-list.ts`** — Chat list fetching, polling (10s), tag resolution
+- **`use-message-thread.ts`** — Message thread, pagination, optimistic sends, file handling, `onMessageSent` callback
+- **`use-device-status.ts`** — Connection status polling
+
 ### Key Patterns
 
+- **Chat actions always visible.** The three-dot (⋮) button renders on every chat row regardless of whether `chatActions` is configured. Clicking it always opens the contact panel (profile picture, name, phone, device). Custom action buttons only appear if a `chatActions` resolver is provided. `resolver` is therefore optional on `ChatActionsDialog`.
 - **Chat tags & filtering.** `chatTags` async resolver on config returns colored tag pills per chat. Tags are resolved eagerly for all visible chats. Users can filter the conversation list by clicking tag chips above the list (AND logic). Types: `ChatTag`, `ChatTagsResolver`.
 - **No backend.** Components call `provider.findChats()`, `provider.sendText()`, etc. directly. Requires CORS on the Evolution API (`CORS_ORIGIN=*`). Uses per-instance tokens (not the global API key) so each device can only access its own instance.
 - **Per-instance tokens.** Each device authenticates with its own scoped token from the Evolution API. The token is generated when the instance is created and only grants access to that single instance. Never use the global API key in the browser.
 - **Tailwind v4 prefix.** All classes use `wa:` prefix (e.g. `wa:flex`, `wa:p-4`) to avoid collisions when embedded in host apps. CSS vars are namespaced as `--wa-*`.
 - **JID/LID deduplication.** WhatsApp uses both phone-based JIDs (`number@s.whatsapp.net`) and anonymous Logical IDs (`randomid@lid`). The provider merges these using `remoteJidAlt`.
 - **Media as base64.** `provider.getMediaUrl()` returns data URIs. File uploads are read client-side via `FileReader` before sending to `provider.sendMedia()`.
+- **Optimistic sends.** Messages appear immediately in the thread with a `pending` status. On success `fetchInitialMessages()` reconciles with server state, then `onMessageSent()` refreshes the chat list.
 - **UI components** use shadcn/ui (Radix + Tailwind) in `src/components/ui/`.
 
 ### Build Output
@@ -91,33 +118,164 @@ Vite library mode produces:
 - `dist/whatsapp-inbox.css` — Prefixed styles
 - `dist/index.d.ts` — TypeScript declarations
 
+## Mock Server
+
+`mock-server/` is a [Hono](https://hono.dev/) HTTP server that replicates the Evolution API v2 contract for local development. No real WhatsApp credentials needed.
+
+### Files
+
+- **`mock-server/index.ts`** — Entry point; serves on `MOCK_PORT` (default `3002`)
+- **`mock-server/app.ts`** — All Evolution API routes + auth middleware + helpers
+- **`mock-server/fixtures.ts`** — Static fixture data organised by instance (`fixturesByInstance`). Exports `MOCK1` and `MOCK2` each with their own `chats`, `contacts`, and `messagesByJid` maps.
+- **`mock-server/store.ts`** — `MockStore` class: in-memory state scoped per instance. Tracks sent messages, incoming replies, media payloads, dynamic contacts, pending unread counts, and deleted IDs.
+
+### Endpoints
+
+| Endpoint | Notes |
+|---|---|
+| `GET /instance/connectionState/:instance` | Static `open` state |
+| `POST /chat/findChats/:instance` | Dynamic: merges fixtures + store, recomputes `lastMessage`/`updatedAt`/`unreadCount`, sorts by recency, creates new chat entries for unknown JIDs |
+| `POST /chat/findContacts/:instance` | Merges fixture contacts + store dynamic contacts |
+| `POST /chat/findMessages/:instance` | Merges fixtures + store, deduplicates by message ID, clears unread for the JID (simulates opening) |
+| `POST /chat/getBase64FromMediaMessage/:instance` | Returns stored base64 for sent media; falls back to 1×1 red PNG for fixture media |
+| `POST /message/sendText/:instance` | Stores message, schedules delivery progression + auto-reply |
+| `POST /message/sendMedia/:instance` | Stores message + base64 payload, schedules delivery + auto-reply |
+| `POST /message/sendButtons/:instance` | Stores full `buttonsMessage` structure, schedules delivery + auto-reply |
+| `DELETE /chat/deleteMessageForEveryone/:instance` | Adds ID to deleted set; emits `protocolMessage` REVOKE into store |
+
+### Auth
+
+All routes (except CORS preflight) require an `apikey` header matching a known token:
+- `mock-token-123` → `MOCK1`
+- `mock-token-456` → `MOCK2`
+
+Unknown tokens return 401. Unknown instances return 404.
+
+### Delivery & auto-reply flow
+
+```
+sendText/sendMedia/sendButtons called
+  → message stored with status PENDING
+  → 300ms  : status → SERVER_ACK
+  → 1500ms : status → DELIVERY_ACK
+  → 2000–3000ms : status → READ, then auto-reply added to store
+```
+
+Auto-reply uses the real contact name from fixtures or store. For group chats, a random fixture participant is selected as sender.
+
+### JID resolution
+
+`resolveJid(number, fixtures)` reconstructs the full JID from a bare number. The Evolution API provider calls `stripJid()` before sending (removing `@g.us`, `@s.whatsapp.net`, `@lid`). The mock restores the correct suffix by matching against known fixture JIDs, defaulting to `@s.whatsapp.net` for unknowns. This is critical for group chats — without it, messages to groups create duplicate chat entries.
+
+### Two mock instances
+
+- **`MOCK1`** — Brazilian contacts: Ana Beatriz, Carlos Eduardo (with @lid pair), Equipe Vendas 🚀 (group), Fernanda Lima, Roberto Mendes
+- **`MOCK2`** — International contacts: Sarah Johnson, James Wright, Product Team 💡 (group), Miguel Torres
+
+### Docker
+
+```yaml
+# docker-compose.yml
+mock-server:  port 3002, command: npx tsx mock-server/index.ts
+frontend:     port 5173, command: npx vite --host 0.0.0.0 --port 5173
+```
+
+Both services share the same `Dockerfile` (node:20-alpine, `npm ci` only). Source is volume-mounted for HMR. `node_modules` use an anonymous volume to isolate Linux binaries from the host macOS ones.
+
+The browser talks directly to `localhost:3002` (cross-port, same host). `index.html` CSP allows `http://localhost:* ws://localhost:*` for this.
+
+## Testing
+
+Two test layers, both targeting the docker stack for e2e.
+
+### Unit tests — Vitest (`make test`)
+
+- Runner: Vitest + jsdom + `@testing-library/preact`
+- Location: `tests/unit/` — no server required
+- Files: `src/providers/evolution.test.ts`, `use-cases/use-chat-list.test.ts`, `use-cases/use-message-thread.test.ts`
+- Setup: `tests/unit/setup.ts` (imports `@testing-library/jest-dom`)
+
+### E2E tests — Playwright (`make test-e2e`)
+
+Requires the docker stack (`make docker`). Tests hit the real frontend at `localhost:5173`, which calls the real mock server at `localhost:3002`. No route interception.
+
+```
+tests/e2e/
+  pages/
+    conversation-list.page.ts   # ConversationListPage POM
+    message-thread.page.ts      # MessageThreadPage POM
+    chat-actions.page.ts        # ChatActionsPage POM
+  chat-list.spec.ts
+  message-thread.spec.ts
+  chat-actions.spec.ts
+```
+
+**Conventions:**
+- Always use POMs — never inline selectors in spec files
+- Use `waitForLoaded()` not `waitForTimeout()`
+- `beforeEach`: `page.goto('/')` → `chatList.waitForLoaded()`
+- Assertions use fixture data from MOCK1/MOCK2 (see `mock-server/fixtures.ts`)
+- New interactive elements need `data-testid="kebab-case"` added to JSX
+
+**`playwright.config.ts`:** `baseURL: http://localhost:5173`, `testDir: ./tests/e2e`, no `webServer`.
+
+**Key `data-testid` attributes:**
+
+| Component | testid | Notes |
+|---|---|---|
+| `conversation-list.tsx` | `conversation-list` | Outer sidebar |
+| | `search-input` | Search field |
+| | `chat-item` + `data-chat-name` | Virtual row button |
+| | `unread-badge` | Only when `unreadCount > 0` |
+| `message-view.tsx` | `message-thread` | Loaded state only |
+| | `message-bubble` + `data-direction` | Per-message wrapper |
+| | `message-input` | Composer text input |
+| | `send-button` | Submit button |
+| `chat-actions-menu.tsx` | `chat-menu-trigger` | Three-dot button |
+| | `chat-actions-panel` | Dialog panel |
+| | `chat-actions-contact-name` | Contact name in panel |
+| | `chat-actions-phone-number` | Phone in panel |
+| | `chat-actions-close` | X button |
+| | `chat-action-button` + `data-action-id` | Custom action button |
+
+### Vue 3 example (`make example-vue3`)
+
+Builds the library then serves the project root at `localhost:5174`. The example at `http://localhost:5174/examples/vue3/` points to the docker mock server at `localhost:3002` (MOCK1 + MOCK2 instances). Requires `make docker` to be running first.
+
+## Environment
+
+`devices.json` is read by the Vite dev server middleware (`serveDevicesJson` in `vite.config.ts`) and served to the browser at `/devices.json`. The middleware only serves the file to loopback connections (`127.0.0.1`, `::1`) to prevent token leakage when the dev server is exposed on a network.
+
+The current `devices.json` is pre-configured for the mock server:
+
+```json
+{
+  "devices": [
+    {
+      "id": "mock-device-1",
+      "label": "Mock WhatsApp 1",
+      "apiUrl": "http://localhost:3002",
+      "instanceToken": "mock-token-123",
+      "instanceName": "MOCK1"
+    },
+    {
+      "id": "mock-device-2",
+      "label": "Mock WhatsApp 2",
+      "apiUrl": "http://localhost:3002",
+      "instanceToken": "mock-token-456",
+      "instanceName": "MOCK2"
+    }
+  ]
+}
+```
+
+To switch to a real Evolution API, replace `devices.json` with real credentials. The loopback guard in `serveDevicesJson` still applies — tokens are never served to non-localhost clients.
+
+To get the per-instance token: call `GET /instance/fetchInstances` with the global API key and look for the `token` field on each instance. Use that as `instanceToken`.
+
 ## Publishing
 
 Package is published to [npm](https://www.npmjs.com/package/@ivanamato/whatsapp-inbox) as `@ivanamato/whatsapp-inbox`. A GitHub Actions workflow (`.github/workflows/publish.yml`) automatically builds and publishes on every GitHub Release using Trusted Publishing (OIDC).
 
 - **Release commands:** `just release-minor` or `just release-major` bump the version, push the tag, and create a GitHub release (which triggers the publish workflow). The justfile is gitignored.
 - **`publishConfig`** in `package.json` sets `"access": "public"`.
-
-To install in another project:
-
-```bash
-npm install @ivanamato/whatsapp-inbox
-```
-
-## Environment
-
-Dev server reads `devices.json` from the project root (see `devices.example.json`). Each device uses a **per-instance token** from the Evolution API — never use the global API key.
-
-To get the per-instance token: call `GET /instance/fetchInstances` with the global API key and look for the `token` field on each instance. Then use that token as `instanceToken` in `devices.json`.
-
-```json
-{
-  "devices": [{
-    "id": "my-device",
-    "label": "My WhatsApp",
-    "apiUrl": "https://your-evolution-api.com",
-    "instanceToken": "PER-INSTANCE-TOKEN-HERE",
-    "instanceName": "your-instance"
-  }]
-}
-```
