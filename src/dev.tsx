@@ -134,4 +134,35 @@ loadConfig().then((config) => {
     inbox.selectConversation('556992924255', 'Hello, I have a question!', 'mock-device-1'), '#2563eb'));
   s2.appendChild(btn('Sarah Johnson + prefill', () =>
     inbox.selectConversation('15551234567', 'Following up on your request', 'mock-device-2'), '#2563eb'));
+
+  // ── Section: Start new chat ─────────────────────────────────────────────
+  const s3 = section('Start new chat');
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;gap:6px;align-items:center';
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.placeholder = 'Phone number…';
+  input.style.cssText = [
+    'flex:1', 'background:#f0f2f5', 'border:none', 'border-radius:8px',
+    'padding:8px 10px', 'font-size:13px', 'color:#111b21', 'outline:none',
+  ].join(';');
+  const openBtn = document.createElement('button');
+  openBtn.textContent = 'Open';
+  openBtn.style.cssText = [
+    'background:#00a884', 'color:#fff', 'border:none', 'border-radius:8px',
+    'padding:8px 12px', 'font-size:13px', 'font-weight:500', 'cursor:pointer',
+    'white-space:nowrap', 'transition:opacity 150ms',
+  ].join(';');
+  openBtn.addEventListener('mouseover', () => { openBtn.style.opacity = '0.8'; });
+  openBtn.addEventListener('mouseout', () => { openBtn.style.opacity = '1'; });
+  openBtn.addEventListener('click', () => {
+    const phone = input.value.trim().replace(/\D/g, '');
+    if (phone) inbox.openChat(phone);
+  });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') openBtn.click();
+  });
+  row.appendChild(input);
+  row.appendChild(openBtn);
+  s3.appendChild(row);
 });
